@@ -262,7 +262,7 @@ jobs:
     
     - name: Decrypt sensitive scripts
       env:
-        ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
+        SCRIPTS_ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
       run: |
         chmod +x bin/bootstrap.sh
         bin/bootstrap.sh run
