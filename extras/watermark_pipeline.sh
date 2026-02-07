@@ -346,7 +346,7 @@ convert_upload() {
 	# STEP 6: Update database
 	# ══════════════════════════════════════════
 
-	log_step "STEP_6: Update database (${log_stamp})"
+	log_step "STEP_6: Update Class (${log_stamp})"
 	update_class "$s3_upload_success" "$vimeo_upload_success" "$vimeo_video_id"
 
 	# ══════════════════════════════════════════
