@@ -2,27 +2,103 @@
 
 This directory contains GitHub Actions workflows and scripts for the watermark video pipeline, migrated from Jenkins.
 
-## Structure
+## Local Testing
 
+Test the pipeline locally before deploying to GitHub Actions. This ensures your configuration works before pushing.
+
+### Prerequisites
+- **Python 3.8+** with virtual environment
+- **Vault CLI** installed (`brew install vault` on macOS)
+- **Vault access** with `WV_TOKEN` (ALL_TOKEN from SVU vault)
+- **Video processing tools** (ffmpeg, etc. - installed by scripts)
+
+### Configuration File
+
+Create `pipeline_config.json` for persistent settings:
+
+```json
+{
+  "dates": {
+    "class_date_list": "20260207"
+  },
+  "options": {
+    "use_s3_original": false,
+    "s3_delete_original": false,
+    "s3_delete_watermark": false,
+    "vemio_delete": false,
+    "delete_local_videos": false,
+    "delete_attendance": false,
+    "clean_local": false,
+    "delete_class": false
+  }
+}
 ```
-github_actions/
-├── watermark-video-pipeline.yml       # Single batch workflow (manual trigger)
-├── watermark-video-pipeline-multi.yml # Multiple batches workflow (auto + manual)
-├── watermark-video-pipeline-vault.yml # Multiple batches with Vault integration ⭐
-├── batch-config.json                  # Batch configuration file
-├── scripts/
-│   ├── watermark_pipeline.sh          # Main pipeline script
-│   ├── s3_tool                        # S3 operations utility
-│   ├── s3_tool_simple.py             # Simplified S3 tool
-│   ├── vemio_upload                   # Vimeo upload script
-│   ├── watermark                      # Video watermarking script
-│   ├── zoomd                          # Zoom video download
-│   └── zoom_attendance                # Attendance processing
-├── requirements.txt                   # Python dependencies
-├── README.md                          # This file
-├── QUICK_START.md                    # 5-minute setup guide
-└── VAULT_INTEGRATION.md              # Vault security documentation
+
+**Environment variables override config file settings.**
+
+### Quick Local Test
+
+1. **Set Vault token:**
+   ```bash
+   export WV_TOKEN="your-base64-encoded-token"
+   export VAULT_ADDR="https://vault.itdefined.org"
+   ```
+
+2. **Run validation test:**
+   ```bash
+   ./test_pipeline_locally.sh
+   ```
+
+3. **Run safe pipeline test:**
+   ```bash
+   ./run_pipeline_locally.sh
+   ```
+
+### Full Local Run (with video processing)
+
+⚠️ **Warning:** This will download/process/upload real videos. Use with caution!
+
+```bash
+# Use config file settings
+./run_pipeline_locally.sh
+
+# Override config with environment variables
+CLASS_DATE_LIST="20260115,20260116" CLEAN_LOCAL=true ./run_pipeline_locally.sh
+
+# Mix config + overrides
+USE_S3_ORIGINAL=true ./run_pipeline_locally.sh
 ```
+
+### Configuration
+
+Edit `batch-config.json` to:
+- **Enable/disable batches:** Set `"enabled": true/false`
+- **Change parent topics:** Modify `"parent_topics"` section
+- **Update batch details:** Course IDs, Zoom IDs, etc.
+
+**Bucket names** are retrieved from Vault:
+- `VIDEO_BUCKET_ORIGINAL` (default: `class-recordings-itdefined-original`)
+- `VIDEO_BUCKET_WATERMARK` (default: `class-recordings-itdefined`)
+
+Add these fields to your Vault at `ql1te2icha/bruxe0az6q` to override defaults.
+
+### Troubleshooting
+
+- **Vault connection fails:** Check `WV_TOKEN` and `VAULT_ADDR`
+- **Credentials empty:** Verify Vault paths in workflow match your setup
+- **Script errors:** Ensure all dependencies installed
+- **Date parsing issues:** macOS uses different `date` command (already fixed)
+
+### Equivalence to GitHub Actions
+
+The local runner (`run_pipeline_locally.sh`) replicates the GitHub Actions workflow:
+- ✅ Same Vault token retrieval process
+- ✅ Identical credential fetching from Vault
+- ✅ Parallel batch processing (backgrounded locally)
+- ✅ Same script arguments and parameters
+- ✅ Reads from `batch-config.json` like GitHub workflow
+
+**Test locally first, then deploy to GitHub Actions!** 🚀
 
 ## Three Workflow Options
 

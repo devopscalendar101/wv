@@ -2,7 +2,7 @@
 
 [[ $# -lt 2 ]] && { echo "Enter Bucket_Name and Object"; exit 1; }
 pwd_path="$PWD"
-bucket_original="class-recordings-itdefined-original"
+bucket_original="${VIDEO_BUCKET_ORIGINAL:-class-recordings-itdefined-original}"
 batch="$2"
 wm_path='/home/drive/watermark'
 
@@ -38,7 +38,11 @@ base_path="${HOME}/.tmp"; cd "$base_path"
 # s3l "$bucket_name" "$batch" '.mp4' | grep -vi 'original'
 [[ -d "${base_path}/${batch}" ]] || mkdir -p "${base_path}/${batch}"
 
-class_formated_date=$(date -d "${class_date}" "+%Y-%m-%d")
+# Parse date for macOS (YYYYMMDD to YYYY-MM-DD)
+year=${class_date:0:4}
+month=${class_date:4:2}
+day=${class_date:6:2}
+class_formated_date="${year}-${month}-${day}"
 original_video_dir="${base_path}/${batch_name}"
 original_video_full="${base_path}/${batch_name}/${class_date}.mp4"
 watermarked_video="${base_path}/${batch_name}/output/${class_date}.mp4"

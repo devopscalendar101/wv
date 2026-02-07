@@ -49,22 +49,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
+    - name: Install system dependencies
+      run: |
+        chmod +x bootstrap.sh
+        ./bootstrap.sh install
+    
     - name: Decrypt sensitive scripts
       env:
-        SCRIPTS_ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
+        ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
       run: |
-        cd github_actions
-        chmod +x decrypt.sh
-        ./decrypt.sh
-    
-    - name: Install Vault CLI
-      run: |
-        wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-        sudo apt update && sudo apt install -y vault
-    
-    - name: Install PostgreSQL client (for testing)
-      run: sudo apt-get install -y postgresql-client
+        chmod +x bootstrap.sh
+        ./bootstrap.sh run
     
     - name: Retrieve Vault Credentials (Multi-step)
       id: vault
@@ -216,7 +211,7 @@ jobs:
       - name: Generate matrix from batch config
         id: set-matrix
         run: |
-          BATCHES=$(cat github_actions/batch-config.json | jq -c '[.batches[] | select(.enabled == true)]')
+          BATCHES=$(cat batch-config.json | jq -c '[.batches[] | select(.enabled == true)]')
           
           if [ -n "${{ github.event.inputs.class_date_list }}" ]; then
             CLASS_DATES="${{ github.event.inputs.class_date_list }}"
@@ -263,30 +258,25 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
+    - name: Install all dependencies
+      run: |
+        chmod +x bootstrap.sh
+        ./bootstrap.sh install
+    
     - name: Decrypt sensitive scripts
       env:
         ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
       run: |
-        cd github_actions
+        chmod +x bootstrap.sh
         ./bootstrap.sh run
-    
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg postgresql-client
     
     - name: Install Python dependencies
       run: |
-        pip install --upgrade pip
-        pip install boto3 vimeo psycopg2-binary requests
+        python3 -m pip install --upgrade pip
+        python3 -m pip install -r requirements.txt
     
     - name: Make scripts executable
-      run: chmod +x github_actions/scripts/*
+      run: chmod +x scripts/*
     
     - name: Download Vault credentials
       uses: actions/download-artifact@v4
@@ -349,7 +339,7 @@ jobs:
     
     - name: Run Watermark Video Pipeline
       run: |
-        ./github_actions/scripts/watermark_pipeline.sh \
+        scripts/watermark_pipeline.sh \
           "class-recordings-itdefined" \
           "${{ matrix.batch_name }}" \
           "${{ matrix.itd_zoom_id }}" \

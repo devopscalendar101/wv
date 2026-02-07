@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
-# Unified script for encrypting/decrypting sensitive files
+# Unified script for encrypting/decrypting sensitive files and installing dependencies
 # Usage: 
-#   bootstrap.sh safe  - Encrypt files and remove originals (run locally before push)
-#   bootstrap.sh run   - Decrypt files (run in GitHub Actions)
+#   bootstrap.sh safe    - Encrypt files and remove originals (run locally before push)
+#   bootstrap.sh run     - Decrypt files (run in GitHub Actions)
+#   bootstrap.sh install - Install required system dependencies (run in GitHub Actions)
 
 set -e
 
@@ -119,18 +120,83 @@ decrypt_files() {
     echo ""
 }
 
+install_dependencies() {
+    echo "📦 Installing system dependencies..."
+    echo ""
+
+    # Update package list
+    echo "  Updating package list..."
+    sudo apt-get update -qq
+
+    # Install required packages
+    echo "  Installing packages..."
+    sudo apt-get install -y -qq \
+        wget \
+        python3 \
+        python3-pip \
+        python3-dev \
+        libpq-dev \
+        postgresql-client \
+        gpg \
+        gnupg \
+        unzip \
+        jq \
+        vim \
+        curl \
+        ca-certificates \
+        software-properties-common \
+        flake8 \
+        ffmpeg
+
+    # Install AWS CLI v2
+    echo "  Installing AWS CLI v2..."
+    if ! command -v aws &> /dev/null; then
+        curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+        unzip -q /tmp/awscliv2.zip -d /tmp
+        sudo /tmp/aws/install
+        rm -rf /tmp/awscliv2.zip /tmp/aws
+    else
+        echo "     ✓ AWS CLI already installed: $(aws --version)"
+    fi
+
+    # Install Vault CLI
+    echo "  Installing HashiCorp Vault CLI..."
+    if ! command -v vault &> /dev/null; then
+        wget -qO- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
+        sudo apt-get update -qq && sudo apt-get install -y -qq vault
+    else
+        echo "     ✓ Vault already installed: $(vault --version)"
+    fi
+
+    echo ""
+    echo "✅ All dependencies installed successfully!"
+    echo ""
+    echo "Installed tools:"
+    echo "  - Python: $(python3 --version)"
+    echo "  - AWS CLI: $(aws --version)"
+    echo "  - Vault: $(vault --version)"
+    echo "  - PostgreSQL client: $(psql --version)"
+    echo "  - FFmpeg: $(ffmpeg -version | head -n1)"
+    echo ""
+}
+
 show_usage() {
     cat << EOF
-Usage: bootstrap.sh {safe|run}
+Usage: bootstrap.sh {safe|run|install}
 
 Commands:
-  safe  - Encrypt sensitive files and remove originals
-          Requires: ENCRYPTION_KEY environment variable
-          Run locally before committing to repo
+  safe    - Encrypt sensitive files and remove originals
+            Requires: ENCRYPTION_KEY environment variable
+            Run locally before committing to repo
           
-  run   - Decrypt sensitive files for use
-          Requires: ENCRYPTION_KEY environment variable
-          Run in GitHub Actions workflow
+  run     - Decrypt sensitive files for use
+            Requires: ENCRYPTION_KEY environment variable
+            Run in GitHub Actions workflow
+
+  install - Install all required system dependencies
+            Run in GitHub Actions before other steps
+            Installs: python3, aws-cli, vault, postgresql-client, ffmpeg, etc.
 
 Examples:
   # Encrypt before push (local)
@@ -164,6 +230,9 @@ case "${1:-}" in
         ;;
     run)
         decrypt_files
+        ;;
+    install)
+        install_dependencies
         ;;
     -h|--help|help)
         show_usage
