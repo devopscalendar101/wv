@@ -4,16 +4,8 @@ on:
   workflow_dispatch:
     inputs:
       class_date_list:
-        description: 'Comma-separated list of class dates (YYYYMMDD)'
-        required: true
-      devops_dec_2025_parent_topic:
-        description: 'DevOps Dec 2025 Parent Topic'
-        required: true
-        default: 'BASH Scripting'
-      cybersecurity_2025_parent_topic:
-        description: 'Cybersecurity 2025 Parent Topic'
-        required: true
-        default: 'Introductions'
+        description: 'Comma-separated list of class dates (YYYYMMDD, leave blank for today)'
+        required: false
       s3_delete_original:
         type: boolean
         default: false
@@ -211,7 +203,9 @@ jobs:
       - name: Generate matrix from batch config
         id: set-matrix
         run: |
-          BATCHES=$(cat batch-config.json | jq -c '[.batches[] | select(.enabled == true)]')
+          CONFIG=$(cat batch-config.json)
+          BATCHES=$(echo "$CONFIG" | jq -c '[.batches[] | select(.enabled == true)]')
+          PARENT_TOPICS=$(echo "$CONFIG" | jq -c '.parent_topics')
           
           if [ -n "${{ github.event.inputs.class_date_list }}" ]; then
             CLASS_DATES="${{ github.event.inputs.class_date_list }}"
@@ -221,6 +215,7 @@ jobs:
           
           MATRIX=$(jq -n -c \
             --argjson batches "$BATCHES" \
+            --argjson parent_topics "$PARENT_TOPICS" \
             --arg dates "$CLASS_DATES" \
             '{
               include: [
@@ -235,6 +230,7 @@ jobs:
                   zoom_account: $batch.zoom_account,
                   zoom_email: $batch.zoom_email,
                   parent_topic_param: $batch.parent_topic_param,
+                  parent_topic: $parent_topics[$batch.parent_topic_param],
                   class_date: $date
                 }
               ]
@@ -310,25 +306,13 @@ jobs:
         # Export to GITHUB_ENV for subsequent steps
         cat "$CREDS_FILE" | sed 's/^export //' >> $GITHUB_ENV
     
-    - name: Determine Parent Topic
+    - name: Set Parent Topic from Config
       id: parent-topic
       run: |
-        case "${{ matrix.parent_topic_param }}" in
-          "DEVOPS_DEC_2025_PARENT_TOPIC")
-            TOPIC="${{ github.event.inputs.devops_dec_2025_parent_topic }}"
-            ;;
-          "CYBERSECURITY_2025_PARENT_TOPIC")
-            TOPIC="${{ github.event.inputs.cybersecurity_2025_parent_topic }}"
-            ;;
-          *)
-            DATE="${{ matrix.class_date }}"
-            YEAR="${DATE:0:4}"
-            MONTH="${DATE:4:2}"
-            DAY="${DATE:6:2}"
-            TOPIC="Topic ${YEAR}-${MONTH}-${DAY}"
-            ;;
-        esac
+        # Parent topic comes from batch-config.json via matrix
+        TOPIC="${{ matrix.parent_topic }}"
         echo "parent_topic=$TOPIC" >> $GITHUB_OUTPUT
+        echo "Using parent topic: $TOPIC"
     
     - name: Generate topic from date
       id: topic
