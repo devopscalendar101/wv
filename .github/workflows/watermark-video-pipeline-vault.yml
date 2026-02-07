@@ -219,7 +219,7 @@ jobs:
             CLASS_DATES=$(date -u +%Y%m%d)
           fi
           
-          MATRIX=$(jq -n \
+          MATRIX=$(jq -n -c \
             --argjson batches "$BATCHES" \
             --arg dates "$CLASS_DATES" \
             '{
@@ -241,7 +241,10 @@ jobs:
             }')
           
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-          echo "Generated matrix:"
+          echo "Generated matrix (compact):"
+          echo "$MATRIX"
+          echo ""
+          echo "Generated matrix (pretty):"
           echo "$MATRIX" | jq .
 
   process-videos:
