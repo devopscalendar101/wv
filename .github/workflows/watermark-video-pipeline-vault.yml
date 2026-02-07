@@ -24,6 +24,10 @@ on:
       use_s3_original:
         type: boolean
         default: false
+      use_local_video:
+        description: 'Use locally uploaded .mp4 instead of Zoom download'
+        type: boolean
+        default: false
       vemio_delete:
         type: boolean
         default: false
@@ -335,7 +339,7 @@ jobs:
           "${{ github.event.inputs.s3_delete_original || 'false' }}" \
           "${{ github.event.inputs.delete_local_videos || 'false' }}" \
           "${{ github.event.inputs.delete_attendance || 'false' }}" \
-          "false" \
+          "${{ github.event.inputs.use_local_video || 'false' }}" \
           "${{ github.event.inputs.delete_class || 'false' }}" \
           "${{ github.event.inputs.s3_delete_watermark || 'false' }}" \
           "${{ github.event.inputs.use_s3_original || 'false' }}" \

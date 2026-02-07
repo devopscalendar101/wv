@@ -27,6 +27,7 @@ __pycache__/
 retrieve_credentials.sh
 run_pipeline_locally.sh
 test_pipeline_locally.sh
+build.sh
 .env.local
 encrypt.sh
 decrypt.sh
