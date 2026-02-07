@@ -75,10 +75,6 @@ get_file_size() {
 	fi
 }
 
-if [[ "$clean_local" == 'true' ]]; then 
-	find "$batch_name" -type f -name "*.mp4" -delete && exit 0 || exit 1
-fi
-
 update_class() {
 	local s3_success="$1"
 	local vimeo_success="$2"

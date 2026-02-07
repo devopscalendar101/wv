@@ -1,6 +1,6 @@
 {
   "dates": {
-    "class_date_list": "20260207"
+    "class_date_list": ""
   },
   "options": {
     "use_s3_original": false,
@@ -9,7 +9,6 @@
     "vemio_delete": false,
     "delete_local_videos": false,
     "delete_attendance": false,
-    "clean_local": true,
     "delete_class": false
   }
 }

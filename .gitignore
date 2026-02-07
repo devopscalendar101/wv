@@ -31,6 +31,9 @@ test_pipeline_locally.sh
 encrypt.sh
 decrypt.sh
 
+# Source code for local development (unencrypted)
+bin/scripts/
+
 # Local overrides (optional - commit template instead)
 # pipeline_config.json
 
