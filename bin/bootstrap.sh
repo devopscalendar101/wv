@@ -121,44 +121,19 @@ install_dependencies() {
     echo "📦 Installing system dependencies..."
     echo ""
 
-    # Update package list
-    echo "  Updating package list..."
+    # Only install what's NOT pre-installed on ubuntu-latest runners
+    # Pre-installed: python3, pip, wget, curl, jq, unzip, gpg, gnupg, aws-cli
+    echo "  Installing required packages..."
     sudo apt-get update -qq
-
-    # Install required packages
-    echo "  Installing packages..."
     sudo apt-get install -y -qq \
-        wget \
-        python3 \
-        python3-pip \
-        python3-dev \
-        libpq-dev \
+        ffmpeg \
         postgresql-client \
-        gpg \
-        gnupg \
-        unzip \
-        jq \
-        vim \
-        curl \
-        ca-certificates \
-        software-properties-common \
-        flake8 \
-        ffmpeg
+        libpq-dev \
+        python3-dev
 
-    # Install AWS CLI v2
-    echo "  Installing AWS CLI v2..."
-    if ! command -v aws &> /dev/null; then
-        curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
-        unzip -q /tmp/awscliv2.zip -d /tmp
-        sudo /tmp/aws/install
-        rm -rf /tmp/awscliv2.zip /tmp/aws
-    else
-        echo "     ✓ AWS CLI already installed: $(aws --version)"
-    fi
-
-    # Install Vault CLI
-    echo "  Installing HashiCorp Vault CLI..."
+    # Install Vault CLI (not pre-installed)
     if ! command -v vault &> /dev/null; then
+        echo "  Installing HashiCorp Vault CLI..."
         wget -qO- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
         echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
         sudo apt-get update -qq && sudo apt-get install -y -qq vault
@@ -167,14 +142,10 @@ install_dependencies() {
     fi
 
     echo ""
-    echo "✅ All dependencies installed successfully!"
-    echo ""
-    echo "Installed tools:"
-    echo "  - Python: $(python3 --version)"
-    echo "  - AWS CLI: $(aws --version)"
-    echo "  - Vault: $(vault --version)"
+    echo "✅ Dependencies installed!"
+    echo "  - FFmpeg: $(ffmpeg -version 2>&1 | head -n1)"
     echo "  - PostgreSQL client: $(psql --version)"
-    echo "  - FFmpeg: $(ffmpeg -version | head -n1)"
+    echo "  - Vault: $(vault --version 2>&1)"
     echo ""
 }
 
