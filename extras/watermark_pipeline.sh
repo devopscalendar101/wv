@@ -51,7 +51,7 @@ original_video_base="${batch_name}/${class_date}.mp4"
 video_source=""
 
 log_stamp="${batch_name}_${class_formated_date}"
-export PATH="$pwd_path/scripts:${PATH}"
+export PATH="$pwd_path/extras:${PATH}"
 
 # Function to get human-readable file size
 get_file_size() {
