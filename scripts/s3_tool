@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+
+import sys, getopt, os
+import boto3
+
+s3 = boto3.client('s3')
+s3_resource = boto3.resource('s3')
+
+def usage():
+    print("""
+Usage:
+  python3 s3_tool.py -m <mode> -b <bucket> -k <key> [options]
+
+Modes:
+  -m, --mode         Mode of operation: download | upload | rename | check | delete
+  -b, --bucket       S3 bucket name
+  -k, --key          S3 object key (file name in S3)
+
+Additional options:
+  --new              New name for 'rename' mode
+  --path             Local path for upload/download (default: current directory)
+
+Examples:
+  Download:
+    python3 s3_tool.py -m download -b my-bucket -k video.mp4 --path /tmp/
+
+  Upload:
+    python3 s3_tool.py -m upload -b my-bucket -k video.mp4 --path /tmp/
+
+  Rename:
+    python3 s3_tool.py -m rename -b my-bucket -k old_name.mp4 --new new_name.mp4
+
+  Check:
+    python3 s3_tool.py -m check -b my-bucket -k file.mp4
+
+  Delete:
+    python3 s3_tool.py -m delete -b my-bucket -k file.mp4
+""")
+
+def download_file(bucket, key, local_path):
+    # Ensure local_path exists
+    if not os.path.exists(local_path):
+        os.makedirs(local_path, exist_ok=True)
+    # Save as <local_path>/<filename> (not as a directory)
+    filename = os.path.basename(key)
+    file_path = os.path.join(local_path, filename)
+    # If a directory exists with the same name, remove it
+    if os.path.isdir(file_path):
+        import shutil
+        shutil.rmtree(file_path)
+    # If file_path exists as a file, skip
+    if os.path.isfile(file_path):
+        print(f"            --> File already exists locally: {file_path}")
+        return
+    try:
+        meta = s3.head_object(Bucket=bucket, Key=key)
+        total = int(meta.get('ContentLength', 0))
+        # Suppress progress bar in Jenkins
+        with open(file_path, 'wb') as f:
+            s3.download_fileobj(bucket, key, f)
+        print('true')
+    except Exception as e:
+        print(f"false: {e}")
+
+# def upload_file(bucket, key, local_path):
+#     if os.path.isfile(local_path):
+#         file_path = local_path
+#         if not key:
+#             key = os.path.basename(file_path)
+#     else:
+#         file_path = os.path.join(local_path, key)
+
+#     if not os.path.exists(file_path):
+#         print(f"Local file not found: {file_path}")
+#         # print('false')
+#         return
+
+#     # Check if file already exists in S3
+#     try:
+#         s3.head_object(Bucket=bucket, Key=key)
+#         print(f"File already exists in S3: {bucket}/{key}")
+#         # print('false')
+#         return
+#     except s3.exceptions.ClientError as e:
+#         if e.response['Error']['Code'] != '404':
+#             print(f"Error checking S3 object: {e}")
+#             # print('false')
+#             return
+#         # If 404, continue with upload
+
+#     try:
+#         total = os.path.getsize(file_path)
+#         with tqdm(total=total, desc=f'{key}', bar_format="{percentage:.1f}%|{bar:25} | {rate_fmt} | {desc}", unit='B', unit_scale=True) as pbar:
+#             with open(file_path, 'rb') as f:
+#                 s3.upload_fileobj(f, bucket, key, Callback=pbar.update)
+#         # print('true')
+#     except Exception as e:
+#         print(f"Upload failed: {e}")
+#         # print('false')
+
+def upload_file(bucket, key, local_path):
+    if os.path.isfile(local_path):
+        file_path = local_path
+        if not key:
+            key = os.path.basename(file_path)
+    else:
+        file_path = os.path.join(local_path, key)
+
+    if not os.path.exists(file_path):
+        print(f"            --> Local file not found: {file_path}")
+        # print('false')
+        return
+
+    # Check if file already exists in S3
+    try:
+        s3.head_object(Bucket=bucket, Key=key)
+        print(f" File already exists in S3: {bucket}/{key}")
+        # print('skip')
+        return
+    except s3.exceptions.ClientError as e:
+        if e.response['Error']['Code'] != '404':
+            print(f" Error checking S3 object: {e}")
+            # print('false')
+            return
+        # If 404, continue with upload
+
+    try:
+        with open(file_path, 'rb') as f:
+            s3.upload_fileobj(f, bucket, key)
+        print(f" File uploaded to s3: {bucket} -> {key}")
+        # print('true')
+    except Exception as e:
+        print(f" Upload failed: {e}")
+        # print('false')
+
+def rename_file(bucket, old_name, new_name):
+    keys = [obj.key for obj in s3_resource.Bucket(bucket).objects.all()]
+    if new_name in keys:
+        print(f" File already exists: {new_name}")
+        return
+    if old_name not in keys:
+        print(f"            --> File not found: {old_name}")
+        return
+    try:
+        s3.copy_object(Bucket=bucket, CopySource=f"{bucket}/{old_name}", Key=new_name)
+        s3.delete_object(Bucket=bucket, Key=old_name)
+        print(f" File renamed success in S3: {bucket}/{new_name}")
+        # print('true')
+    except Exception as e:
+        print(f" Rename failed: {e}")
+        # print('false')
+
+def check_file(bucket, key):
+    keys = [obj.key for obj in s3_resource.Bucket(bucket).objects.all()]
+    print('true' if key in keys else 'false')
+
+def delete_file(bucket, key):
+    try:
+        s3.delete_object(Bucket=bucket, Key=key)
+        print(f"File deleted successfuly in S3: {bucket}/{key}")
+        # print('true')
+    except Exception as e:
+        print(f"Delete failed: {e}")
+        # print('false')
+
+def main():
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], "m:b:k:", ["mode=", "bucket=", "key=", "new=", "path="])
+    except getopt.GetoptError as e:
+        print(str(e))
+        usage()
+        sys.exit(2)
+
+    mode = bucket = key = new_name = None
+    path = "."
+
+    for opt, arg in opts:
+        if opt in ("-m", "--mode"):
+            mode = arg.lower()
+        elif opt in ("-b", "--bucket"):
+            bucket = arg
+        elif opt in ("-k", "--key"):
+            key = arg
+        elif opt == "--new":
+            new_name = arg
+        elif opt == "--path":
+            path = arg
+
+    if not (mode and bucket and key):
+        usage()
+        sys.exit(2)
+
+    if mode == "download":
+        download_file(bucket, key, path)
+    elif mode == "upload":
+        if os.path.isfile(path) and not key:
+            key = os.path.basename(path)
+        upload_file(bucket, key, path)
+    elif mode == "rename":
+        if not new_name:
+            print(" Missing --new for rename mode")
+            sys.exit(1)
+        rename_file(bucket, key, new_name)
+    elif mode == "check":
+        check_file(bucket, key)
+    elif mode == "delete":
+        delete_file(bucket, key)
+    else:
+        print(f" Invalid mode: {mode}")
+        usage()
+
+if __name__ == "__main__":
+    main()

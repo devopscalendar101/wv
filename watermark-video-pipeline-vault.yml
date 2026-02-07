@@ -1,0 +1,407 @@
+name: Watermark Video Pipeline - With Vault
+
+on:
+  workflow_dispatch:
+    inputs:
+      class_date_list:
+        description: 'Comma-separated list of class dates (YYYYMMDD)'
+        required: true
+      devops_dec_2025_parent_topic:
+        description: 'DevOps Dec 2025 Parent Topic'
+        required: true
+        default: 'BASH Scripting'
+      cybersecurity_2025_parent_topic:
+        description: 'Cybersecurity 2025 Parent Topic'
+        required: true
+        default: 'Introductions'
+      s3_delete_original:
+        type: boolean
+        default: false
+      delete_local_videos:
+        type: boolean
+        default: false
+      delete_attendance:
+        type: boolean
+        default: false
+      delete_class:
+        type: boolean
+        default: false
+      s3_delete_watermark:
+        type: boolean
+        default: false
+      use_s3_original:
+        type: boolean
+        default: false
+      vemio_delete:
+        type: boolean
+        default: false
+  
+  schedule:
+    - cron: '*/15 4-8,13-15 * * *'
+
+jobs:
+  get-vault-credentials:
+    runs-on: ubuntu-latest
+    outputs:
+      credentials-file: ${{ steps.vault.outputs.file }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Decrypt sensitive scripts
+      env:
+        SCRIPTS_ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
+      run: |
+        cd github_actions
+        chmod +x decrypt.sh
+        ./decrypt.sh
+    
+    - name: Install Vault CLI
+      run: |
+        wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt update && sudo apt install -y vault
+    
+    - name: Install PostgreSQL client (for testing)
+      run: sudo apt-get install -y postgresql-client
+    
+    - name: Retrieve Vault Credentials (Multi-step)
+      id: vault
+      env:
+        VAULT_ADDR: ${{ secrets.VAULT_URL }}
+        SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
+      run: |
+        set +x
+        
+        export VAULT_TOKEN="$SERVICE_TOKEN"
+        echo "STEP 1: Getting vault tokens and credentials"
+        
+        # Step 1: Get ALL token from SVU vault
+        ALL_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=toc7kawoc7 -mount=hej0SESwEs cicuwrl4po)
+        if [ -z "$ALL_TOKEN" ]; then
+            echo "ERROR: Failed to get ALL_TOKEN from SVU vault"
+            exit 1
+        fi
+        echo "✓ ALL token obtained"
+        
+        export VAULT_TOKEN="$ALL_TOKEN"
+        
+        # Step 2: Get app-specific tokens from ALL vault
+        ITD_TEST_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=wr0swu5udi -mount=driy9s4uce je0emad4ov)
+        ZOOM_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=v0ve2regos -mount=driy9s4uce je0emad4ov)
+        AWS_ROOT_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=vepiz9pafr -mount=driy9s4uce je0emad4ov)
+        
+        [[ -z "$ITD_TEST_TOKEN" ]] && { echo "ERROR: Failed to get ITD_TEST_TOKEN"; exit 1; }
+        [[ -z "$ZOOM_TOKEN" ]] && { echo "ERROR: Failed to get ZOOM_TOKEN"; exit 1; }
+        [[ -z "$AWS_ROOT_TOKEN" ]] && { echo "ERROR: Failed to get AWS_ROOT_TOKEN"; exit 1; }
+        echo "✓ App tokens obtained"
+        
+        # Step 3: Get DB credentials from ITD_TEST vault
+        export VAULT_TOKEN="$ITD_TEST_TOKEN"
+        echo "STEP 2: Getting DB credentials"
+        
+        PGHOST=$(vault kv get -address="$VAULT_ADDR" -field=DB_HOST -mount=ql1te2icha bruxe0az6q)
+        PGPORT=$(vault kv get -address="$VAULT_ADDR" -field=DB_PORT -mount=ql1te2icha bruxe0az6q)
+        PGDATABASE=$(vault kv get -address="$VAULT_ADDR" -field=DB_NAME -mount=ql1te2icha bruxe0az6q)
+        PGUSER=$(vault kv get -address="$VAULT_ADDR" -field=DB_USER -mount=ql1te2icha bruxe0az6q)
+        PGPASSWORD=$(vault kv get -address="$VAULT_ADDR" -field=DB_PASSWORD -mount=ql1te2icha bruxe0az6q)
+        
+        [[ -z "$PGHOST" ]] && { echo "ERROR: PGHOST is empty"; exit 1; }
+        [[ -z "$PGPORT" ]] && { echo "ERROR: PGPORT is empty"; exit 1; }
+        [[ -z "$PGDATABASE" ]] && { echo "ERROR: PGDATABASE is empty"; exit 1; }
+        [[ -z "$PGUSER" ]] && { echo "ERROR: PGUSER is empty"; exit 1; }
+        [[ -z "$PGPASSWORD" ]] && { echo "ERROR: PGPASSWORD is empty"; exit 1; }
+        echo "✓ DB credentials retrieved (password length: ${#PGPASSWORD})"
+        
+        # Test DB connection
+        echo "Testing DB connection..."
+        if PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1;" > /dev/null 2>&1; then
+            echo "✓ DB connection successful"
+        else
+            echo "ERROR: DB connection failed"
+            exit 1
+        fi
+        
+        # Step 4: Get AWS credentials from AWS_ROOT vault
+        export VAULT_TOKEN="$AWS_ROOT_TOKEN"
+        echo "STEP 3: Getting AWS credentials"
+        
+        AWS_ACCESS_KEY_ID=$(vault kv get -address="$VAULT_ADDR" -field=thujostav9 -mount=yi6pobrath s7ohebu2ho)
+        AWS_SECRET_ACCESS_KEY=$(vault kv get -address="$VAULT_ADDR" -field=yuru9ibruw -mount=yi6pobrath s7ohebu2ho)
+        AWS_DEFAULT_REGION=ap-south-1
+        
+        [[ -z "$AWS_ACCESS_KEY_ID" ]] && { echo "ERROR: AWS_ACCESS_KEY_ID is empty"; exit 1; }
+        [[ -z "$AWS_SECRET_ACCESS_KEY" ]] && { echo "ERROR: AWS_SECRET_ACCESS_KEY is empty"; exit 1; }
+        echo "✓ AWS credentials retrieved"
+        
+        # Step 5: Get Vimeo credentials from ITD_TEST vault
+        export VAULT_TOKEN="$ITD_TEST_TOKEN"
+        echo "STEP 4: Getting Vimeo credentials"
+        
+        VIMEO_ACCESS_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_ACCESS_TOKEN -mount=ql1te2icha bruxe0az6q)
+        VIMEO_CLIENT_ID=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_CLIENT_ID -mount=ql1te2icha bruxe0az6q)
+        VIMEO_CLIENT_SECRET=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_CLIENT_SECRET -mount=ql1te2icha bruxe0az6q)
+        
+        [[ -z "$VIMEO_ACCESS_TOKEN" ]] && { echo "ERROR: VIMEO_ACCESS_TOKEN is empty"; exit 1; }
+        [[ -z "$VIMEO_CLIENT_ID" ]] && { echo "ERROR: VIMEO_CLIENT_ID is empty"; exit 1; }
+        [[ -z "$VIMEO_CLIENT_SECRET" ]] && { echo "ERROR: VIMEO_CLIENT_SECRET is empty"; exit 1; }
+        echo "✓ Vimeo credentials retrieved"
+        
+        # Step 6: Get Zoom credentials from ZOOM vault
+        export VAULT_TOKEN="$ZOOM_TOKEN"
+        echo "STEP 5: Getting Zoom credentials"
+        
+        Z1_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG1 -mount=t1lrophebr sestip6ecu)
+        Z1_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG1 -mount=t1lrophebr sestip6ecu)
+        Z1_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG1 -mount=t1lrophebr sestip6ecu)
+        Z2_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG2 -mount=t1lrophebr sestip6ecu)
+        Z2_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG2 -mount=t1lrophebr sestip6ecu)
+        Z2_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG2 -mount=t1lrophebr sestip6ecu)
+        Z4_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG4 -mount=t1lrophebr sestip6ecu)
+        Z4_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG4 -mount=t1lrophebr sestip6ecu)
+        Z4_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG4 -mount=t1lrophebr sestip6ecu)
+        
+        [[ -z "$Z1_AI" ]] && { echo "ERROR: Z1_AI is empty"; exit 1; }
+        [[ -z "$Z2_AI" ]] && { echo "ERROR: Z2_AI is empty"; exit 1; }
+        [[ -z "$Z4_AI" ]] && { echo "ERROR: Z4_AI is empty"; exit 1; }
+        echo "✓ Zoom credentials retrieved"
+        
+        # Save credentials to encrypted file using proper escaping
+        CREDS_FILE="${RUNNER_TEMP}/vault_creds_${GITHUB_RUN_ID}.env"
+        {
+            echo "export PGHOST=$(printf %q "$PGHOST")"
+            echo "export PGPORT=$(printf %q "$PGPORT")"
+            echo "export PGDATABASE=$(printf %q "$PGDATABASE")"
+            echo "export PGUSER=$(printf %q "$PGUSER")"
+            echo "export PGPASSWORD=$(printf %q "$PGPASSWORD")"
+            echo "export AWS_ACCESS_KEY_ID=$(printf %q "$AWS_ACCESS_KEY_ID")"
+            echo "export AWS_SECRET_ACCESS_KEY=$(printf %q "$AWS_SECRET_ACCESS_KEY")"
+            echo "export AWS_DEFAULT_REGION=$(printf %q "$AWS_DEFAULT_REGION")"
+            echo "export VIMEO_ACCESS_TOKEN=$(printf %q "$VIMEO_ACCESS_TOKEN")"
+            echo "export VIMEO_CLIENT_ID=$(printf %q "$VIMEO_CLIENT_ID")"
+            echo "export VIMEO_CLIENT_SECRET=$(printf %q "$VIMEO_CLIENT_SECRET")"
+            echo "export Z1_AI=$(printf %q "$Z1_AI")"
+            echo "export Z1_CI=$(printf %q "$Z1_CI")"
+            echo "export Z1_CS=$(printf %q "$Z1_CS")"
+            echo "export Z2_AI=$(printf %q "$Z2_AI")"
+            echo "export Z2_CI=$(printf %q "$Z2_CI")"
+            echo "export Z2_CS=$(printf %q "$Z2_CS")"
+            echo "export Z4_AI=$(printf %q "$Z4_AI")"
+            echo "export Z4_CI=$(printf %q "$Z4_CI")"
+            echo "export Z4_CS=$(printf %q "$Z4_CS")"
+        } > "$CREDS_FILE"
+        
+        chmod 600 "$CREDS_FILE"
+        echo "✓ Credentials saved to $CREDS_FILE with proper escaping"
+        echo "file=$CREDS_FILE" >> $GITHUB_OUTPUT
+    
+    - name: Upload credentials as artifact (encrypted by GitHub)
+      uses: actions/upload-artifact@v4
+      with:
+        name: vault-credentials-${{ github.run_id }}
+        path: ${{ steps.vault.outputs.file }}
+        retention-days: 1
+
+  prepare-matrix:
+    needs: get-vault-credentials
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Generate matrix from batch config
+        id: set-matrix
+        run: |
+          BATCHES=$(cat github_actions/batch-config.json | jq -c '[.batches[] | select(.enabled == true)]')
+          
+          if [ -n "${{ github.event.inputs.class_date_list }}" ]; then
+            CLASS_DATES="${{ github.event.inputs.class_date_list }}"
+          else
+            CLASS_DATES=$(date -u +%Y%m%d)
+          fi
+          
+          MATRIX=$(jq -n \
+            --argjson batches "$BATCHES" \
+            --arg dates "$CLASS_DATES" \
+            '{
+              include: [
+                $batches[] as $batch |
+                ($dates | split(",") | .[] | gsub("^\\s+|\\s+$";"")) as $date |
+                {
+                  batch_name: $batch.batch_name,
+                  course_id: $batch.course_id,
+                  itd_zoom_id: $batch.itd_zoom_id,
+                  batch_id: $batch.batch_id,
+                  zoom_id: $batch.zoom_id,
+                  zoom_account: $batch.zoom_account,
+                  zoom_email: $batch.zoom_email,
+                  parent_topic_param: $batch.parent_topic_param,
+                  class_date: $date
+                }
+              ]
+            }')
+          
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Generated matrix:"
+          echo "$MATRIX" | jq .
+
+  process-videos:
+    needs: [get-vault-credentials, prepare-matrix]
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    
+    name: "${{ matrix.batch_name }}_${{ matrix.class_date }}"
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Decrypt sensitive scripts
+      env:
+        ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
+      run: |
+        cd github_actions
+        ./bootstrap.sh run
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg postgresql-client
+    
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip
+        pip install boto3 vimeo psycopg2-binary requests
+    
+    - name: Make scripts executable
+      run: chmod +x github_actions/scripts/*
+    
+    - name: Download Vault credentials
+      uses: actions/download-artifact@v4
+      with:
+        name: vault-credentials-${{ github.run_id }}
+        path: ${{ runner.temp }}
+    
+    - name: Load credentials and verify
+      run: |
+        CREDS_FILE="${RUNNER_TEMP}/vault_creds_${GITHUB_RUN_ID}.env"
+        
+        if [ ! -f "$CREDS_FILE" ]; then
+          echo "ERROR: Credentials file not found: $CREDS_FILE"
+          exit 1
+        fi
+        
+        # Source credentials
+        source "$CREDS_FILE"
+        
+        # Verify DB connection
+        echo "Testing database connection..."
+        psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1;" || {
+          echo "ERROR: Database connection failed"
+          exit 1
+        }
+        echo "✓ Database connection successful"
+        
+        # Export to GITHUB_ENV for subsequent steps
+        cat "$CREDS_FILE" | sed 's/^export //' >> $GITHUB_ENV
+    
+    - name: Determine Parent Topic
+      id: parent-topic
+      run: |
+        case "${{ matrix.parent_topic_param }}" in
+          "DEVOPS_DEC_2025_PARENT_TOPIC")
+            TOPIC="${{ github.event.inputs.devops_dec_2025_parent_topic }}"
+            ;;
+          "CYBERSECURITY_2025_PARENT_TOPIC")
+            TOPIC="${{ github.event.inputs.cybersecurity_2025_parent_topic }}"
+            ;;
+          *)
+            DATE="${{ matrix.class_date }}"
+            YEAR="${DATE:0:4}"
+            MONTH="${DATE:4:2}"
+            DAY="${DATE:6:2}"
+            TOPIC="Topic ${YEAR}-${MONTH}-${DAY}"
+            ;;
+        esac
+        echo "parent_topic=$TOPIC" >> $GITHUB_OUTPUT
+    
+    - name: Generate topic from date
+      id: topic
+      run: |
+        DATE="${{ matrix.class_date }}"
+        YEAR="${DATE:0:4}"
+        MONTH="${DATE:4:2}"
+        DAY="${DATE:6:2}"
+        TOPIC="Topic ${YEAR}-${MONTH}-${DAY}"
+        echo "topic=$TOPIC" >> $GITHUB_OUTPUT
+    
+    - name: Run Watermark Video Pipeline
+      run: |
+        ./github_actions/scripts/watermark_pipeline.sh \
+          "class-recordings-itdefined" \
+          "${{ matrix.batch_name }}" \
+          "${{ matrix.itd_zoom_id }}" \
+          "${{ matrix.zoom_account }}" \
+          "${{ steps.topic.outputs.topic }}" \
+          "${{ matrix.course_id }}" \
+          "${{ matrix.batch_id }}" \
+          "${{ steps.parent-topic.outputs.parent_topic }}" \
+          "${{ matrix.zoom_id }}" \
+          "${{ matrix.zoom_email }}" \
+          "${{ matrix.class_date }}" \
+          "${{ github.event.inputs.s3_delete_original || 'false' }}" \
+          "${{ github.event.inputs.delete_local_videos || 'false' }}" \
+          "${{ github.event.inputs.delete_attendance || 'false' }}" \
+          "false" \
+          "${{ github.event.inputs.delete_class || 'false' }}" \
+          "${{ github.event.inputs.s3_delete_watermark || 'false' }}" \
+          "${{ github.event.inputs.use_s3_original || 'false' }}" \
+          "$VIMEO_ACCESS_TOKEN" \
+          "$VIMEO_CLIENT_ID" \
+          "$VIMEO_CLIENT_SECRET" \
+          "${{ github.event.inputs.vemio_delete || 'false' }}"
+    
+    - name: Upload artifacts (if failed)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: logs-${{ matrix.batch_name }}-${{ matrix.class_date }}
+        path: |
+          ~/.tmp/${{ matrix.batch_name }}/*.log
+          ~/.tmp/${{ matrix.batch_name }}/*.txt
+        retention-days: 7
+        if-no-files-found: ignore
+    
+    - name: Cleanup local videos
+      if: always()
+      run: rm -rf ~/.tmp/${{ matrix.batch_name }}/*.mp4 || true
+    
+    - name: Cleanup credentials
+      if: always()
+      run: |
+        CREDS_FILE="${RUNNER_TEMP}/vault_creds_${GITHUB_RUN_ID}.env"
+        rm -f "$CREDS_FILE" || true
+
+  cleanup-credentials:
+    needs: [get-vault-credentials, process-videos]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Delete credentials artifact
+      uses: geekyeggo/delete-artifact@v5
+      with:
+        name: vault-credentials-${{ github.run_id }}
+        failOnError: false

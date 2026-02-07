@@ -1,0 +1,253 @@
+name: Watermark Video Pipeline - Multiple Batches
+
+on:
+  workflow_dispatch:
+    inputs:
+      class_date_list:
+        description: 'Comma-separated list of class dates (YYYYMMDD, e.g., 20260205,20260206)'
+        required: true
+      devops_dec_2025_parent_topic:
+        description: 'DevOps Dec 2025 Parent Topic'
+        required: true
+        default: 'BASH Scripting'
+      devops_july_2025_parent_topic:
+        description: 'DevOps July 2025 Parent Topic'
+        required: false
+        default: 'Kubernetes'
+      ngo_ds_2025_parent_topic:
+        description: 'Data Science 2025 Parent Topic'
+        required: false
+        default: 'Data Analytics'
+      cybersecurity_2025_parent_topic:
+        description: 'Cybersecurity 2025 Parent Topic'
+        required: true
+        default: 'Introductions'
+      s3_delete_original:
+        description: 'Delete from S3 Original Bucket'
+        type: boolean
+        default: false
+      delete_local_videos:
+        description: 'Delete Local Videos After Processing'
+        type: boolean
+        default: false
+      delete_attendance:
+        description: 'Delete Existing Attendance'
+        type: boolean
+        default: false
+      delete_class:
+        description: 'Delete Existing Class'
+        type: boolean
+        default: false
+      s3_delete_watermark:
+        description: 'Delete from S3 Watermark Bucket'
+        type: boolean
+        default: false
+      use_s3_original:
+        description: 'Use Original Video from S3'
+        type: boolean
+        default: false
+      vemio_delete:
+        description: 'Delete Existing Vimeo Video'
+        type: boolean
+        default: false
+  
+  schedule:
+    # Run every 15 minutes during class hours (IST 10:00-14:00 and 19:00-21:00)
+    # IST = UTC+5:30, so 10:00 IST = 04:30 UTC, 14:00 IST = 08:30 UTC
+    # 19:00 IST = 13:30 UTC, 21:00 IST = 15:30 UTC
+    - cron: '*/15 4-8,13-15 * * *'
+
+env:
+  AWS_REGION: ap-south-1
+  PGHOST: ${{ secrets.DB_HOST }}
+  PGPORT: ${{ secrets.DB_PORT }}
+  PGDATABASE: ${{ secrets.DB_NAME }}
+  PGUSER: ${{ secrets.DB_USER }}
+  PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: ap-south-1
+  VIMEO_ACCESS_TOKEN: ${{ secrets.VIMEO_ACCESS_TOKEN }}
+  VIMEO_CLIENT_ID: ${{ secrets.VIMEO_CLIENT_ID }}
+  VIMEO_CLIENT_SECRET: ${{ secrets.VIMEO_CLIENT_SECRET }}
+  Z2_AI: ${{ secrets.ZOOM_Z2_ACCOUNT_ID }}
+  Z2_CI: ${{ secrets.ZOOM_Z2_CLIENT_ID }}
+  Z2_CS: ${{ secrets.ZOOM_Z2_CLIENT_SECRET }}
+  Z4_AI: ${{ secrets.ZOOM_Z4_ACCOUNT_ID }}
+  Z4_CI: ${{ secrets.ZOOM_Z4_CLIENT_ID }}
+  Z4_CS: ${{ secrets.ZOOM_Z4_CLIENT_SECRET }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Generate matrix from batch config
+        id: set-matrix
+        run: |
+          # Read batch config and filter enabled batches
+          BATCHES=$(cat github_actions/batch-config.json | jq -c '[.batches[] | select(.enabled == true)]')
+          
+          # Get class dates (from input or default to today)
+          if [ -n "${{ github.event.inputs.class_date_list }}" ]; then
+            CLASS_DATES="${{ github.event.inputs.class_date_list }}"
+          else
+            CLASS_DATES=$(date -u +%Y%m%d)
+          fi
+          
+          # Create matrix with all combinations of batches and dates
+          MATRIX=$(jq -n \
+            --argjson batches "$BATCHES" \
+            --arg dates "$CLASS_DATES" \
+            '{
+              include: [
+                $batches[] as $batch |
+                ($dates | split(",") | .[] | gsub("^\\s+|\\s+$";"")) as $date |
+                {
+                  batch_name: $batch.batch_name,
+                  course_id: $batch.course_id,
+                  itd_zoom_id: $batch.itd_zoom_id,
+                  batch_id: $batch.batch_id,
+                  zoom_id: $batch.zoom_id,
+                  zoom_account: $batch.zoom_account,
+                  zoom_email: $batch.zoom_email,
+                  parent_topic_param: $batch.parent_topic_param,
+                  class_date: $date
+                }
+              ]
+            }')
+          
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Generated matrix:"
+          echo "$MATRIX" | jq .
+
+  process-videos:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    
+    name: "${{ matrix.batch_name }}_${{ matrix.class_date }}"
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Decrypt sensitive scripts
+      env:
+        ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
+      run: |
+        cd github_actions
+        ./bootstrap.sh run
+    
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg postgresql-client
+    
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip
+        pip install boto3 vimeo psycopg2-binary requests
+    
+    - name: Make scripts executable
+      run: chmod +x github_actions/scripts/*
+    
+    - name: Test Database Connection
+      run: |
+        psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1;" || {
+          echo "ERROR: Database connection failed"
+          exit 1
+        }
+        echo "✓ Database connection successful"
+    
+    - name: Determine Parent Topic
+      id: parent-topic
+      run: |
+        case "${{ matrix.parent_topic_param }}" in
+          "DEVOPS_DEC_2025_PARENT_TOPIC")
+            TOPIC="${{ github.event.inputs.devops_dec_2025_parent_topic }}"
+            ;;
+          "DEVOPS_JULY_2025_PARENT_TOPIC")
+            TOPIC="${{ github.event.inputs.devops_july_2025_parent_topic }}"
+            ;;
+          "NGO_DS_2025_PARENT_TOPIC")
+            TOPIC="${{ github.event.inputs.ngo_ds_2025_parent_topic }}"
+            ;;
+          "CYBERSECURITY_2025_PARENT_TOPIC")
+            TOPIC="${{ github.event.inputs.cybersecurity_2025_parent_topic }}"
+            ;;
+          *)
+            # Default topic based on date
+            YEAR="${{ matrix.class_date }}"
+            YEAR="${YEAR:0:4}"
+            MONTH="${YEAR:4:2}"
+            DAY="${YEAR:6:2}"
+            TOPIC="Topic ${YEAR}-${MONTH}-${DAY}"
+            ;;
+        esac
+        echo "parent_topic=$TOPIC" >> $GITHUB_OUTPUT
+        echo "Using parent topic: $TOPIC"
+    
+    - name: Generate topic from date
+      id: topic
+      run: |
+        DATE="${{ matrix.class_date }}"
+        YEAR="${DATE:0:4}"
+        MONTH="${DATE:4:2}"
+        DAY="${DATE:6:2}"
+        TOPIC="Topic ${YEAR}-${MONTH}-${DAY}"
+        echo "topic=$TOPIC" >> $GITHUB_OUTPUT
+    
+    - name: Run Watermark Video Pipeline
+      run: |
+        ./github_actions/scripts/watermark_pipeline.sh \
+          "class-recordings-itdefined" \
+          "${{ matrix.batch_name }}" \
+          "${{ matrix.itd_zoom_id }}" \
+          "${{ matrix.zoom_account }}" \
+          "${{ steps.topic.outputs.topic }}" \
+          "${{ matrix.course_id }}" \
+          "${{ matrix.batch_id }}" \
+          "${{ steps.parent-topic.outputs.parent_topic }}" \
+          "${{ matrix.zoom_id }}" \
+          "${{ matrix.zoom_email }}" \
+          "${{ matrix.class_date }}" \
+          "${{ github.event.inputs.s3_delete_original || 'false' }}" \
+          "${{ github.event.inputs.delete_local_videos || 'false' }}" \
+          "${{ github.event.inputs.delete_attendance || 'false' }}" \
+          "false" \
+          "${{ github.event.inputs.delete_class || 'false' }}" \
+          "${{ github.event.inputs.s3_delete_watermark || 'false' }}" \
+          "${{ github.event.inputs.use_s3_original || 'false' }}" \
+          "$VIMEO_ACCESS_TOKEN" \
+          "$VIMEO_CLIENT_ID" \
+          "$VIMEO_CLIENT_SECRET" \
+          "${{ github.event.inputs.vemio_delete || 'false' }}"
+    
+    - name: Upload artifacts (if failed)
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: logs-${{ matrix.batch_name }}-${{ matrix.class_date }}
+        path: |
+          ~/.tmp/${{ matrix.batch_name }}/*.log
+          ~/.tmp/${{ matrix.batch_name }}/*.txt
+        retention-days: 7
+        if-no-files-found: ignore
+    
+    - name: Cleanup local videos
+      if: always()
+      run: |
+        rm -rf ~/.tmp/${{ matrix.batch_name }}/*.mp4 || true

@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+import os
+import sys
+import shutil
+import vimeo
+import logging
+from typing import Optional, Dict
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def upload_video_to_vimeo(
+    file_path: str,
+    vimeo_access_token: str,
+    vimeo_client_id: str,
+    vimeo_client_secret: str,
+    folder_name: str,
+    video_name: Optional[str] = None,
+    video_description: str = 'Uploaded via Vimeo API',
+    privacy_view: str = 'disable',
+    privacy_embed: str = 'whitelist',
+    embed_domains: list = None,
+    move_after_upload: bool = True,
+    move_to_subfolder: str = 'old',
+    delete_if_exists: bool = False
+) -> Optional[Dict[str, str]]:
+    """
+    Upload a video file to Vimeo and optionally move it to a folder.
+    
+    Args:
+        file_path: Full path to the video file to upload
+        vimeo_access_token: Vimeo API access token
+        vimeo_client_id: Vimeo API client ID
+        vimeo_client_secret: Vimeo API client secret
+        folder_name: Name of the Vimeo folder/project to upload to
+        video_name: Name for the video in Vimeo (defaults to filename)
+        video_description: Description for the video
+        privacy_view: Privacy view setting ('disable', 'anybody', 'nobody', 'contacts', 'password', 'users', 'unlisted')
+        privacy_embed: Privacy embed setting ('public', 'private', 'whitelist')
+        embed_domains: List of domains allowed to embed (used with whitelist)
+        move_after_upload: Whether to move the file after successful upload
+        move_to_subfolder: Subfolder name to move uploaded files to (relative to file location)
+        delete_if_exists: Whether to delete existing video before uploading (default: False)
+    
+    Returns:
+        Dictionary with video details if successful, None otherwise:
+        {
+            'video_id': str,
+            'video_uri': str,
+            'video_name': str,
+            'link': str,
+            'embed_url': str,
+            'already_existed': bool
+        }
+    """
+    # Set defaults
+    if embed_domains is None:
+        embed_domains = ['localhost', 'itdefined.org', 'test.itdefined.org']
+    
+    if video_name is None:
+        video_name = os.path.basename(file_path)
+    
+    # Validate file exists
+    if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
+        return None
+    
+    try:
+        # Initialize Vimeo client
+        vimeo_client = vimeo.VimeoClient(
+            token=vimeo_access_token,
+            key=vimeo_client_id,
+            secret=vimeo_client_secret
+        )
+        
+        # Get folder ID
+        folders = vimeo_client.get('/me/projects').json().get('data', [])
+        folder = next((f for f in folders if f['name'] == folder_name), None)
+        
+        if not folder:
+            # Create folder if it doesn't exist
+            logger.info(f"Vimeo folder '{folder_name}' not found. Creating it...")
+            try:
+                response = vimeo_client.post('/me/projects', data={'name': folder_name})
+                if response.status_code in [200, 201]:
+                    folder_data = response.json()
+                    folder_id = folder_data['uri']
+                    logger.info(f"Successfully created Vimeo folder '{folder_name}'")
+                else:
+                    logger.error(f"Failed to create Vimeo folder '{folder_name}': {response.status_code}")
+                    return None
+            except Exception as e:
+                logger.error(f"Error creating Vimeo folder '{folder_name}': {e}")
+                return None
+        else:
+            folder_id = folder['uri']
+        
+        # Check if video already exists in folder
+        videos = vimeo_client.get(f'{folder_id}/videos').json().get('data', [])
+        existing_video = next((v for v in videos if v['name'] == video_name), None)
+        
+        if existing_video:
+            existing_video_id = existing_video['uri'].split('/')[-1]
+            
+            if delete_if_exists:
+                # Delete existing video and upload new one
+                logger.debug(f"Video '{video_name}' already exists in Vimeo (ID: {existing_video_id}). Deleting...")
+                try:
+                    vimeo_client.delete(existing_video['uri'])
+                    logger.debug(f"Successfully deleted video '{video_name}' from Vimeo")
+                except Exception as e:
+                    logger.error(f"Failed to delete existing video: {e}")
+                    return None
+                # Continue to upload new video
+            else:
+                # Return existing video details without uploading
+                logger.debug(f"Video '{video_name}' already exists in Vimeo (ID: {existing_video_id})")
+                return {
+                    'video_id': existing_video_id,
+                    'video_uri': existing_video['uri'],
+                    'video_name': video_name,
+                    'link': existing_video['link'],
+                    'embed_url': existing_video['player_embed_url'],
+                    'already_existed': True
+                }
+        
+        # Upload video to Vimeo
+        logger.debug(f"Uploading '{video_name}' to Vimeo folder '{folder_name}'...")
+        
+        uri = vimeo_client.upload(file_path, data={
+            'name': video_name,
+            'description': video_description,
+            'privacy': {
+                'view': privacy_view,
+                'embed': privacy_embed
+            },
+            'embed_domains': embed_domains
+        })
+        
+        video_id = uri.split('/')[-1]
+        logger.info(f"Video uploaded successfully (ID: {video_id})")
+        
+        # Move video to folder/project
+        try:
+            response = vimeo_client.put(f'{folder_id}/videos/{video_id}')
+            if response.status_code in [200, 201, 204]:
+                logger.info(f"Video successfully added to folder '{folder_name}'")
+            else:
+                logger.warning(f"Unexpected response when adding video to folder: {response.status_code}")
+            
+            # Verify video is in the folder
+            videos_in_folder = vimeo_client.get(f'{folder_id}/videos').json().get('data', [])
+            video_in_folder = next((v for v in videos_in_folder if v['uri'].split('/')[-1] == video_id), None)
+            
+            if not video_in_folder:
+                logger.error(f"Video uploaded but NOT found in folder '{folder_name}'. Retrying to add to folder...")
+                # Retry adding to folder
+                retry_response = vimeo_client.put(f'{folder_id}/videos/{video_id}')
+                if retry_response.status_code not in [200, 201, 204]:
+                    logger.error(f"Failed to add video to folder after retry. Video may be orphaned.")
+                else:
+                    logger.info(f"Video successfully added to folder on retry")
+            else:
+                logger.info(f"Verified: Video is in folder '{folder_name}'")
+        except Exception as e:
+            logger.error(f"Error adding video to folder '{folder_name}': {e}")
+            # Video was uploaded but not added to folder - this is a warning state
+            logger.warning(f"Video uploaded (ID: {video_id}) but may not be in folder '{folder_name}'")
+        
+        # Get video details
+        video_response = vimeo_client.get(uri).json()
+        video_details = {
+            'video_id': video_id,
+            'video_uri': uri,
+            'video_name': video_name,
+            'link': video_response.get('link', ''),
+            'embed_url': video_response.get('player_embed_url', ''),
+            'already_existed': False
+        }
+        
+        # Move file to 'old' subfolder if requested
+        if move_after_upload:
+            try:
+                folder = os.path.dirname(file_path)
+                old_folder = os.path.join(folder, move_to_subfolder)
+                os.makedirs(old_folder, exist_ok=True)
+                
+                file_name = os.path.basename(file_path)
+                destination = os.path.join(old_folder, file_name)
+                shutil.move(file_path, destination)
+                logger.info(f"Moved uploaded file to: {destination}")
+            except Exception as e:
+                logger.warning(f"Failed to move file after upload: {e}")
+        
+        return video_details
+        
+    except Exception as e:
+        logger.error(f"Error uploading video '{video_name}' to Vimeo: {e}")
+        return None
+
+
+# Example usage:
+if __name__ == "__main__":
+    import sys
+    import requests
+    
+    # Get parameters from command line args
+    # Expected usage: vemio_upload <batch_name> <video_file_path> <vimeo_access_token> <vimeo_client_id> <vimeo_client_secret> <vemio_delete>
+    
+    if len(sys.argv) < 7:
+        print("Usage: vemio_upload <batch_name> <video_file_path> <vimeo_access_token> <vimeo_client_id> <vimeo_client_secret> <vemio_delete>")
+        sys.exit(1)
+    
+    batch_name = sys.argv[1]
+    video_file_path = sys.argv[2]
+    vimeo_access_token = sys.argv[3]
+    vimeo_client_id = sys.argv[4]
+    vimeo_client_secret = sys.argv[5]
+    vemio_delete = sys.argv[6].lower() == 'true'
+    
+    # Check if video file exists
+    if not os.path.exists(video_file_path):
+        print(f"            --> \033[0;31mERROR: Video file not found: {video_file_path}\033[0m")
+        sys.exit(1)
+    
+    # Check if Vimeo credentials are provided
+    if not all([vimeo_access_token, vimeo_client_id, vimeo_client_secret]):
+        print("            --> \033[0;31mERROR: Vimeo credentials not provided\033[0m")
+        sys.exit(1)
+    
+    try:
+        # Upload to Vimeo
+        result = upload_video_to_vimeo(
+            file_path=video_file_path,
+            vimeo_access_token=vimeo_access_token,
+            vimeo_client_id=vimeo_client_id,
+            vimeo_client_secret=vimeo_client_secret,
+            folder_name=batch_name,
+            privacy_view='disable',
+            privacy_embed='whitelist',
+            embed_domains=['localhost', 'itdefined.org', 'test.itdefined.org'],
+            move_after_upload=True,
+            move_to_subfolder='old',
+            delete_if_exists=vemio_delete
+        )
+        
+        if result:
+            video_file = os.path.basename(video_file_path)
+            if result.get('already_existed'):
+                print(f"            --> \033[0;32mVideo already exists in Vimeo Server: {result['video_id']} {video_file}\033[0m")
+            else:
+                print(f"            --> \033[0;32mVideo uploaded to Vimeo Server: {result['video_id']} {video_file}\033[0m")
+            
+            sys.exit(0)
+        else:
+            video_file = os.path.basename(video_file_path)
+            print(f"            --> \033[0;31mVideo upload to Vimeo Server Failed: {video_file}\033[0m")
+            sys.exit(1)
+            
+    except Exception as e:
+        logger.error(f"Error during Vimeo upload: {e}")
+        video_file = os.path.basename(video_file_path)
+        print(f"            --> \033[0;31mVideo upload to Vimeo Server Failed: {video_file}\033[0m")
+        sys.exit(1)
