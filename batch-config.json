@@ -1,4 +1,10 @@
 {
+  "parent_topics": {
+    "DEVOPS_DEC_2025_PARENT_TOPIC": "BASH Scripting",
+    "DEVOPS_JULY_2025_PARENT_TOPIC": "Kubernetes",
+    "NGO_DS_2025_PARENT_TOPIC": "Data Analytics",
+    "CYBERSECURITY_2025_PARENT_TOPIC": "Introductions"
+  },
   "batches": [
     {
       "course_id": "2",
@@ -42,7 +48,7 @@
       "zoom_account": "Z4",
       "zoom_email": "itdefined.org4@gmail.com",
       "parent_topic_param": "CYBERSECURITY_2025_PARENT_TOPIC",
-      "enabled": true
+      "enabled": false
     }
   ]
 }

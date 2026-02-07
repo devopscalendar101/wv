@@ -1,0 +1,15 @@
+{
+  "dates": {
+    "class_date_list": "20260207"
+  },
+  "options": {
+    "use_s3_original": false,
+    "s3_delete_original": false,
+    "s3_delete_watermark": false,
+    "vemio_delete": false,
+    "delete_local_videos": false,
+    "delete_attendance": false,
+    "clean_local": true,
+    "delete_class": false
+  }
+}

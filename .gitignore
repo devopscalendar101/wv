@@ -1,13 +1,39 @@
-# Add this to .gitignore to prevent committing unencrypted scripts
-
-# Unencrypted scripts (only .enc versions should be committed)
-github_actions/scripts/s3_tool
-github_actions/scripts/vemio_upload
-github_actions/scripts/watermark
-github_actions/scripts/zoomd
-github_actions/scripts/s3wm_update
-github_actions/scripts/zoom_attendance
-github_actions/scripts/s3_tool_simple.py
+# Prevent committing unencrypted scripts (only .enc versions should be committed)
+scripts/s3_tool
+scripts/vemio_upload
+scripts/watermark
+scripts/zoomd
+scripts/s3wm_update
+scripts/zoom_attendance
+scripts/s3_tool_simple.py
 
 # But DO commit the encrypted versions
-!github_actions/scripts/*.enc
+!scripts/*.enc
+
+# Commit these public files
+!scripts/watermark_pipeline.sh
+!batch-config.json
+!requirements.txt
+!*.md
+!*.yml
+!*.sh
+
+# Local development
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Sensitive local config files (DO NOT COMMIT)
+retrieve_credentials.sh
+run_pipeline_locally.sh
+test_pipeline_locally.sh
+.env.local
+
+# Local overrides (optional - commit template instead)
+# pipeline_config.json
+
+# Test/temp files
+.tmp/
+*.log
+.pytest_cache/
