@@ -12,13 +12,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Files to encrypt/decrypt
 FILES=(
-    "scripts/s3_tool"
-    "scripts/vemio_upload"
-    "scripts/watermark"
-    "scripts/zoomd"
-    "scripts/s3wm_update"
-    "scripts/zoom_attendance"
-    "scripts/s3_tool_simple.py"
+    "extras/s3_tool"
+    "extras/vemio_upload"
+    "extras/watermark"
+    "extras/zoomd"
+    "extras/s3wm_update"
+    "extras/zoom_attendance"
+    "extras/s3_tool_simple.py"
 )
 
 encrypt_files() {
@@ -65,7 +65,7 @@ encrypt_files() {
     echo ""
     echo "Next steps:"
     echo "  1. Commit the .enc files:"
-    echo "     git add github_actions/scripts/*.enc"
+    echo "     git add extras/*.enc"
     echo "     git commit -m 'Update encrypted scripts'"
     echo "     git push"
     echo ""
@@ -202,7 +202,7 @@ Examples:
   # Encrypt before push (local)
   export ENCRYPTION_KEY='your-strong-key-here'
   ./bootstrap.sh safe
-  git add scripts/*.enc
+  git add extras/*.enc
   git push
 
   # Decrypt in GitHub Actions (workflow)

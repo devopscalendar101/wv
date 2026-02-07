@@ -1,17 +1,17 @@
 # Prevent committing unencrypted scripts (only .enc versions should be committed)
-scripts/s3_tool
-scripts/vemio_upload
-scripts/watermark
-scripts/zoomd
-scripts/s3wm_update
-scripts/zoom_attendance
-scripts/s3_tool_simple.py
+extras/s3_tool
+extras/vemio_upload
+extras/watermark
+extras/zoomd
+extras/s3wm_update
+extras/zoom_attendance
+extras/s3_tool_simple.py
 
 # But DO commit the encrypted versions
-!scripts/*.enc
+!extras/*.enc
 
 # Commit these public files
-!scripts/watermark_pipeline.sh
+!extras/watermark_pipeline.sh
 !batch-config.json
 !requirements.txt
 !*.yml
