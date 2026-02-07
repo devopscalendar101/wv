@@ -25,3 +25,4 @@ hurry.filesize>=0.9
 
 # Optional: Progress bars (if needed)
 tqdm>=4.66.0
+pandas>=2.0.0

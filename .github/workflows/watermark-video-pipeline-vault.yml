@@ -9,9 +9,6 @@ on:
       s3_delete_original:
         type: boolean
         default: false
-      delete_local_videos:
-        type: boolean
-        default: false
       delete_attendance:
         type: boolean
         default: false
@@ -339,6 +336,8 @@ jobs:
           echo "Z4_AI=$Z4_AI"
           echo "Z4_CI=$Z4_CI"
           echo "Z4_CS=$Z4_CS"
+          echo "ITD_USER=${{ secrets.ITD_USER }}"
+          echo "ITD_PASS=${{ secrets.ITD_PASS }}"
         } >> $GITHUB_ENV
     
     - name: Set Parent Topic from Config
@@ -359,6 +358,49 @@ jobs:
         TOPIC="Topic ${YEAR}-${MONTH}-${DAY}"
         echo "topic=$TOPIC" >> $GITHUB_OUTPUT
     
+    - name: Pipeline Options Check
+      run: |
+        S3_DEL_ORIG="${{ github.event.inputs.s3_delete_original || 'false' }}"
+        S3_DEL_WM="${{ github.event.inputs.s3_delete_watermark || 'false' }}"
+        VEMIO_DEL="${{ github.event.inputs.vemio_delete || 'false' }}"
+        USE_S3="${{ github.event.inputs.use_s3_original || 'false' }}"
+        USE_LOCAL="${{ github.event.inputs.use_local_video || 'false' }}"
+        DEL_ATT="${{ github.event.inputs.delete_attendance || 'false' }}"
+        DEL_CLASS="${{ github.event.inputs.delete_class || 'false' }}"
+
+        icon() { [[ "$1" == "true" ]] && echo "🟢 ON" || echo "⚪ OFF"; }
+
+        echo "┌──────────────────────────────────────────────┐"
+        echo "│            PIPELINE OPTIONS                   │"
+        echo "├──────────────────────────────────────────────┤"
+        printf "│  %-6s  %-36s │\n" "$(icon $USE_S3)" "use_s3_original (skip Zoom, use S3)"
+        printf "│  %-6s  %-36s │\n" "$(icon $USE_LOCAL)" "use_local_video (use uploaded .mp4)"
+        echo "├──────────────────────────────────────────────┤"
+        printf "│  %-6s  %-36s │\n" "$(icon $S3_DEL_ORIG)" "s3_delete_original (re-download)"
+        printf "│  %-6s  %-36s │\n" "$(icon $S3_DEL_WM)" "s3_delete_watermark (re-watermark)"
+        printf "│  %-6s  %-36s │\n" "$(icon $VEMIO_DEL)" "vemio_delete (re-upload to Vimeo)"
+        printf "│  %-6s  %-36s │\n" "$(icon $DEL_CLASS)" "delete_class (re-create DB record)"
+        printf "│  %-6s  %-36s │\n" "$(icon $DEL_ATT)" "delete_attendance (re-fetch)"
+        echo "└──────────────────────────────────────────────┘"
+
+        # Warn about destructive combos
+        ACTIVE=0
+        [[ "$S3_DEL_ORIG" == "true" ]] && ACTIVE=$((ACTIVE+1))
+        [[ "$S3_DEL_WM" == "true" ]] && ACTIVE=$((ACTIVE+1))
+        [[ "$VEMIO_DEL" == "true" ]] && ACTIVE=$((ACTIVE+1))
+        [[ "$DEL_CLASS" == "true" ]] && ACTIVE=$((ACTIVE+1))
+        [[ "$DEL_ATT" == "true" ]] && ACTIVE=$((ACTIVE+1))
+
+        if [[ $ACTIVE -ge 3 ]]; then
+          echo "::warning::⚠️ $ACTIVE delete flags active — this will re-process most of the pipeline"
+        fi
+        if [[ "$S3_DEL_ORIG" == "true" && "$USE_S3" == "true" ]]; then
+          echo "::warning::⚠️ s3_delete_original + use_s3_original both ON — will delete then try to download from same bucket!"
+        fi
+        if [[ "$USE_S3" == "true" && "$USE_LOCAL" == "true" ]]; then
+          echo "::warning::⚠️ use_s3_original + use_local_video both ON — local video takes priority"
+        fi
+
     - name: Run Watermark Video Pipeline
       id: pipeline
       run: |
@@ -376,7 +418,6 @@ jobs:
           "${{ matrix.zoom_email }}" \
           "${{ matrix.class_date }}" \
           "${{ github.event.inputs.s3_delete_original || 'false' }}" \
-          "${{ github.event.inputs.delete_local_videos || 'false' }}" \
           "${{ github.event.inputs.delete_attendance || 'false' }}" \
           "${{ github.event.inputs.use_local_video || 'false' }}" \
           "${{ github.event.inputs.delete_class || 'false' }}" \
