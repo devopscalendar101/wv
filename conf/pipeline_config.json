@@ -4,6 +4,7 @@
   },
   "options": {
     "use_s3_original": false,
+    "use_local_video": false,
     "s3_delete_original": false,
     "s3_delete_watermark": false,
     "vemio_delete": false,
