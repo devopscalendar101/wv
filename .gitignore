@@ -39,6 +39,3 @@ test_pipeline_locally.sh
 
 # Documentation (optional - ignore or commit as needed)
 *.md
-
-# GitHub workflows directory (workflows are in root yml files)
-.github/
