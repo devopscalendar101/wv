@@ -26,14 +26,13 @@ webinar_email="${10}"
 class_date="${11}"
 s3_delete_original="${12}"
 delete_attendance="${13}"
-use_local_video="${14}"
-delete_class="${15}"
-s3_delete_watermark="${16}"
-use_s3_original="${17}"
-vimeo_access_token="${18}"
-vimeo_client_id="${19}"
-vimeo_client_secret="${20}"
-vemio_delete="${21}"
+delete_class="${14}"
+s3_delete_watermark="${15}"
+use_s3_original="${16}"
+vimeo_access_token="${17}"
+vimeo_client_id="${18}"
+vimeo_client_secret="${19}"
+vemio_delete="${20}"
 
 base_path="${HOME}/.tmp"
 mkdir -p "$base_path"
@@ -209,19 +208,7 @@ convert_upload() {
 
 	log_step "STEP_1: Getting original video (${log_stamp})"
 
-	if [[ "$use_local_video" == "true" ]]; then
-		# LOCAL VIDEO: Use uploaded artifact
-		local upload_video="${base_path}/${batch_name}/upload_${class_date}.mp4"
-		if [[ -f "$upload_video" ]]; then
-			cp "$upload_video" "$original_video_full"
-			log_ok "Using locally uploaded video: $upload_video ($(get_file_size "$original_video_full"))"
-		elif [[ -f "$original_video_full" ]]; then
-			log_ok "Using existing local video: $(get_file_size "$original_video_full")"
-		else
-			log_err "Local video not found: $upload_video"
-			return 1
-		fi
-	elif [[ "$has_original" == "true" ]] && [[ "$use_s3_original" != "true" ]]; then
+	if [[ "$has_original" == "true" ]] && [[ "$use_s3_original" != "true" ]]; then
 		# Original in S3, no need to download from Zoom
 		log_skip "Original already in S3 - skipping Zoom download"
 		# Download from S3 only if we need local copy for watermarking
@@ -386,7 +373,6 @@ echo "    CONFIGURATIONS:
 	WEBINAR_ID: $webinar_id
 	WEBINAR_EMAIL: $webinar_email
 	CLASS_DATE: $class_date
-	USE_LOCAL_VIDEO: $use_local_video
 	S3_DELETE_ORIGINAL: $s3_delete_original
 	S3_DELETE_WATERMARK: $s3_delete_watermark
 	VEMIO_DELETE: $vemio_delete

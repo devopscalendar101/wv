@@ -21,10 +21,6 @@ on:
       use_s3_original:
         type: boolean
         default: false
-      use_local_video:
-        description: 'Use locally uploaded .mp4 instead of Zoom download'
-        type: boolean
-        default: false
       vemio_delete:
         type: boolean
         default: false
@@ -361,7 +357,6 @@ jobs:
         S3_DEL_WM="${{ github.event.inputs.s3_delete_watermark || 'false' }}"
         VEMIO_DEL="${{ github.event.inputs.vemio_delete || 'false' }}"
         USE_S3="${{ github.event.inputs.use_s3_original || 'false' }}"
-        USE_LOCAL="${{ github.event.inputs.use_local_video || 'false' }}"
         DEL_ATT="${{ github.event.inputs.delete_attendance || 'false' }}"
         DEL_CLASS="${{ github.event.inputs.delete_class || 'false' }}"
 
@@ -371,7 +366,6 @@ jobs:
         echo "│            PIPELINE OPTIONS                   │"
         echo "├──────────────────────────────────────────────┤"
         printf "│  %-6s  %-36s │\n" "$(icon $USE_S3)" "use_s3_original (skip Zoom, use S3)"
-        printf "│  %-6s  %-36s │\n" "$(icon $USE_LOCAL)" "use_local_video (use uploaded .mp4)"
         echo "├──────────────────────────────────────────────┤"
         printf "│  %-6s  %-36s │\n" "$(icon $S3_DEL_ORIG)" "s3_delete_original (re-download)"
         printf "│  %-6s  %-36s │\n" "$(icon $S3_DEL_WM)" "s3_delete_watermark (re-watermark)"
@@ -394,9 +388,6 @@ jobs:
         if [[ "$S3_DEL_ORIG" == "true" && "$USE_S3" == "true" ]]; then
           echo "::warning::⚠️ s3_delete_original + use_s3_original both ON — will delete then try to download from same bucket!"
         fi
-        if [[ "$USE_S3" == "true" && "$USE_LOCAL" == "true" ]]; then
-          echo "::warning::⚠️ use_s3_original + use_local_video both ON — local video takes priority"
-        fi
 
     - name: Run Watermark Video Pipeline
       id: pipeline
@@ -416,7 +407,6 @@ jobs:
           "${{ matrix.class_date }}" \
           "${{ github.event.inputs.s3_delete_original || 'false' }}" \
           "${{ github.event.inputs.delete_attendance || 'false' }}" \
-          "${{ github.event.inputs.use_local_video || 'false' }}" \
           "${{ github.event.inputs.delete_class || 'false' }}" \
           "${{ github.event.inputs.s3_delete_watermark || 'false' }}" \
           "${{ github.event.inputs.use_s3_original || 'false' }}" \
