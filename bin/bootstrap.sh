@@ -9,16 +9,17 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Files to encrypt/decrypt
+# Files to encrypt/decrypt (source in bin/scripts/, encrypted in extras/)
 FILES=(
-    "extras/s3_tool"
-    "extras/vemio_upload"
-    "extras/watermark"
-    "extras/zoomd"
-    "extras/s3wm_update"
-    "extras/zoom_attendance"
-    "extras/s3_tool_simple.py"
+    "s3_tool"
+    "vemio_upload"
+    "watermark"
+    "zoomd"
+    "s3wm_update"
+    "zoom_attendance"
+    "s3_tool_simple.py"
 )
 
 encrypt_files() {
@@ -33,27 +34,24 @@ encrypt_files() {
         exit 1
     fi
 
-    echo "🔐 Encrypting sensitive files..."
+    echo "🔐 Encrypting sensitive files from bin/scripts/ to extras/..."
     echo ""
 
     local encrypted_count=0
     local skipped_count=0
 
     for file in "${FILES[@]}"; do
-        if [[ -f "$SCRIPT_DIR/$file" ]]; then
+        if [[ -f "$REPO_ROOT/bin/scripts/$file" ]]; then
             echo "  🔒 Encrypting: $file"
-            openssl enc -aes-256-cbc -salt -pbkdf2 -in "$SCRIPT_DIR/$file" -out "$SCRIPT_DIR/${file}.enc" -k "$ENCRYPTION_KEY"
-            
-            # Remove original file after successful encryption
-            rm "$SCRIPT_DIR/$file"
-            echo "     ✓ Encrypted and removed original: $file"
+            openssl enc -aes-256-cbc -salt -pbkdf2 -in "$REPO_ROOT/bin/scripts/$file" -out "$REPO_ROOT/extras/${file}.enc" -k "$ENCRYPTION_KEY"
+            echo "     ✓ Encrypted: bin/scripts/$file → extras/${file}.enc"
             encrypted_count=$((encrypted_count + 1))
         else
-            if [[ -f "$SCRIPT_DIR/${file}.enc" ]]; then
-                echo "  ⏭️  Already encrypted: ${file}.enc"
+            if [[ -f "$REPO_ROOT/extras/${file}.enc" ]]; then
+                echo "  ⏭️  Already encrypted: extras/${file}.enc"
                 skipped_count=$((skipped_count + 1))
             else
-                echo "  ⚠️  File not found: $file"
+                echo "  ⚠️  Source file not found: bin/scripts/$file"
             fi
         fi
     done
@@ -89,25 +87,25 @@ decrypt_files() {
         exit 1
     fi
 
-    echo "🔓 Decrypting sensitive files..."
+    echo "🔓 Decrypting sensitive files from extras/ to extras/..."
     echo ""
 
     local decrypted_count=0
     local skipped_count=0
 
     for file in "${FILES[@]}"; do
-        if [[ -f "$SCRIPT_DIR/${file}.enc" ]]; then
+        if [[ -f "$REPO_ROOT/extras/${file}.enc" ]]; then
             echo "  🔓 Decrypting: $file"
-            openssl enc -aes-256-cbc -d -pbkdf2 -in "$SCRIPT_DIR/${file}.enc" -out "$SCRIPT_DIR/$file" -k "$ENCRYPTION_KEY"
-            chmod +x "$SCRIPT_DIR/$file" 2>/dev/null || true
-            echo "     ✓ Decrypted: $file"
+            openssl enc -aes-256-cbc -d -pbkdf2 -in "$REPO_ROOT/extras/${file}.enc" -out "$REPO_ROOT/extras/$file" -k "$ENCRYPTION_KEY"
+            chmod +x "$REPO_ROOT/extras/$file" 2>/dev/null || true
+            echo "     ✓ Decrypted: extras/${file}.enc → extras/$file"
             decrypted_count=$((decrypted_count + 1))
         else
-            if [[ -f "$SCRIPT_DIR/$file" ]]; then
-                echo "  ⏭️  Already decrypted: $file"
+            if [[ -f "$REPO_ROOT/extras/$file" ]]; then
+                echo "  ⏭️  Already decrypted: extras/$file"
                 skipped_count=$((skipped_count + 1))
             else
-                echo "  ⚠️  Encrypted file not found: ${file}.enc"
+                echo "  ⚠️  Encrypted file not found: extras/${file}.enc"
             fi
         fi
     done
