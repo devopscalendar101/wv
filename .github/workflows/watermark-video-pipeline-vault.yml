@@ -41,7 +41,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Install Vault CLI
+    - name: Install Vault CLI and PostgreSQL
       run: |
         wget -qO- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
         echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
@@ -197,7 +197,7 @@ jobs:
       - name: Generate matrix from batch config
         id: set-matrix
         run: |
-          CONFIG=$(cat batch-config.json)
+          CONFIG=$(cat conf/batch-config.json)
           BATCHES=$(echo "$CONFIG" | jq -c '[.batches[] | select(.enabled == true)]')
           PARENT_TOPICS=$(echo "$CONFIG" | jq -c '.parent_topics')
           
@@ -253,15 +253,15 @@ jobs:
     
     - name: Install all dependencies
       run: |
-        chmod +x bootstrap.sh
-        ./bootstrap.sh install
+        chmod +x bin/bootstrap.sh
+        bin/bootstrap.sh install
     
     - name: Decrypt sensitive scripts
       env:
         ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
       run: |
-        chmod +x bootstrap.sh
-        ./bootstrap.sh run
+        chmod +x bin/bootstrap.sh
+        bin/bootstrap.sh run
     
     - name: Install Python dependencies
       run: |
