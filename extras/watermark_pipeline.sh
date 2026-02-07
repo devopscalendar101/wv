@@ -183,14 +183,15 @@ convert_upload() {
 		log_info "Watermarked video NOT in S3: $bucket_name/$original_video_base"
 	fi
 
-	# Check Vimeo
-	local vimeo_check_output=$(vemio_upload "$batch_name" "CHECK_ONLY" "$vimeo_access_token" "$vimeo_client_id" "$vimeo_client_secret" "false" 2>&1 || true)
+	# Check Vimeo (pass the expected filename so vemio_upload can match it)
 	local has_vimeo="false"
-	if echo "$vimeo_check_output" | grep -q "already exists" 2>/dev/null; then
+	local vimeo_check_output=$(vemio_upload "$batch_name" "${class_date}.mp4" "$vimeo_access_token" "$vimeo_client_id" "$vimeo_client_secret" "false" 2>&1 || true)
+	if echo "$vimeo_check_output" | grep -qi "already exists" 2>/dev/null; then
 		has_vimeo="true"
-		log_ok "Video EXISTS in Vimeo"
+		vimeo_video_id=$(echo "$vimeo_check_output" | grep -oP '(?<=Vimeo Server: )\d+' | head -n1)
+		log_ok "Video EXISTS in Vimeo (ID: ${vimeo_video_id:-unknown})"
 	else
-		log_info "Video NOT in Vimeo (or check unavailable)"
+		log_info "Video NOT in Vimeo"
 	fi
 
 	echo ""
@@ -226,13 +227,13 @@ convert_upload() {
 		# Download from S3 only if we need local copy for watermarking
 		if [[ "$has_watermark" == "false" ]] && [[ ! -f "$original_video_full" ]]; then
 			log_info "Downloading original from S3 for watermarking..."
-			s3_tool -m download -b "$bucket_original" -k "$original_video_base" --path "$original_video_dir"
+			s3_tool -m download -b "$bucket_original" -k "$original_video_base" --path "$original_video_dir" > /dev/null 2>&1
 			[[ -f "$original_video_full" ]] && log_ok "Downloaded: $(get_file_size "$original_video_full")"
 		fi
 	elif [[ "$use_s3_original" == "true" ]]; then
 		# Explicit: download from S3 original
 		log_info "Downloading from S3 original bucket..."
-		s3_tool -m download -b "$bucket_original" -k "$original_video_base" --path "$original_video_dir"
+		s3_tool -m download -b "$bucket_original" -k "$original_video_base" --path "$original_video_dir" > /dev/null 2>&1
 		if [[ -f "$original_video_full" ]]; then
 			log_ok "Downloaded from S3: $(get_file_size "$original_video_full")"
 		else
@@ -288,7 +289,7 @@ convert_upload() {
 		if [[ "$has_vimeo" == "false" ]] || [[ "$vemio_delete" == "true" ]]; then
 			if [[ ! -f "$watermarked_video" ]]; then
 				log_info "Downloading watermarked from S3 for Vimeo upload..."
-				s3_tool -m download -b "$bucket_name" -k "$original_video_base" --path "$(dirname "$watermarked_video")"
+				s3_tool -m download -b "$bucket_name" -k "$original_video_base" --path "$(dirname "$watermarked_video")" > /dev/null 2>&1
 				[[ -f "$watermarked_video" ]] && log_ok "Downloaded: $(get_file_size "$watermarked_video")"
 			fi
 		fi
@@ -337,7 +338,7 @@ convert_upload() {
 	log_step "STEP_5: Upload to Vimeo (${log_stamp})"
 
 	if [[ "$has_vimeo" == "true" ]] && [[ "$vemio_delete" != "true" ]]; then
-		log_skip "Video already in Vimeo"
+		log_skip "Video already in Vimeo (ID: ${vimeo_video_id:-unknown})"
 		vimeo_upload_success="true"
 	elif [[ -f "$watermarked_video" ]]; then
 		local vimeo_output=$(vemio_upload "$batch_name" "$watermarked_video" "$vimeo_access_token" "$vimeo_client_id" "$vimeo_client_secret" "$vemio_delete" 2>&1)
