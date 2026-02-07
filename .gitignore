@@ -3,7 +3,6 @@ extras/s3_tool
 extras/vemio_upload
 extras/watermark
 extras/zoomd
-extras/s3wm_update
 extras/zoom_attendance
 extras/s3_tool_simple.py
 
