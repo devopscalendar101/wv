@@ -18,6 +18,17 @@
       "enabled": true
     },
     {
+      "course_id": "49",
+      "batch_name": "itd_cysec_jan_2026",
+      "itd_zoom_id": "20260112",
+      "batch_id": "41",
+      "zoom_id": "81682381743",
+      "zoom_account": "Z4",
+      "zoom_email": "itdefined.org4@gmail.com",
+      "parent_topic_param": "CYBERSECURITY_2025_PARENT_TOPIC",
+      "enabled": true
+    },
+    {
       "course_id": "2",
       "batch_name": "itd_devops_july_2025",
       "itd_zoom_id": "28062025",
@@ -37,17 +48,6 @@
       "zoom_account": "Z2",
       "zoom_email": "itdefined.org2@gmail.com",
       "parent_topic_param": "NGO_DS_2025_PARENT_TOPIC",
-      "enabled": false
-    },
-    {
-      "course_id": "49",
-      "batch_name": "itd_cysec_jan_2026",
-      "itd_zoom_id": "20260112",
-      "batch_id": "41",
-      "zoom_id": "81682381743",
-      "zoom_account": "Z4",
-      "zoom_email": "itdefined.org4@gmail.com",
-      "parent_topic_param": "CYBERSECURITY_2025_PARENT_TOPIC",
       "enabled": false
     }
   ]
