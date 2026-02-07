@@ -14,13 +14,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Files to decrypt
 FILES_TO_DECRYPT=(
-    "scripts/s3_tool"
-    "scripts/vemio_upload"
-    "scripts/watermark"
-    "scripts/zoomd"
-    "scripts/s3wm_update"
-    "scripts/zoom_attendance"
-    "scripts/s3_tool_simple.py"
+    "extras/s3_tool"
+    "extras/vemio_upload"
+    "extras/watermark"
+    "extras/zoomd"
+    "extras/s3wm_update"
+    "extras/zoom_attendance"
+    "extras/s3_tool_simple.py"
 )
 
 echo "🔓 Decrypting sensitive files..."
