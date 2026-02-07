@@ -28,6 +28,8 @@ retrieve_credentials.sh
 run_pipeline_locally.sh
 test_pipeline_locally.sh
 .env.local
+encrypt.sh
+decrypt.sh
 
 # Local overrides (optional - commit template instead)
 # pipeline_config.json
