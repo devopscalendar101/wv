@@ -3,8 +3,8 @@
 # AWS SDK
 boto3>=1.34.0
 
-# Vimeo API
-vimeo>=1.1.0
+# Vimeo API (PyVimeo is the correct package)
+PyVimeo>=1.1.0
 
 # Database
 psycopg2-binary>=2.9.9
