@@ -252,6 +252,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
+    - name: Cache pip packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ hashFiles('requirements.txt') }}
+    
     - name: System Info
       run: |
         echo "┌──────────────────────────────────────────┐"
@@ -268,25 +274,16 @@ jobs:
         printf "│ %-40s │\n" "DATE: ${{ matrix.class_date }}"
         echo "└──────────────────────────────────────────┘"
     
-    - name: Install all dependencies
-      run: |
-        chmod +x bin/bootstrap.sh
-        bin/bootstrap.sh install
-    
-    - name: Decrypt sensitive scripts
+    - name: Setup Environment
       env:
         SCRIPTS_ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
       run: |
         chmod +x bin/bootstrap.sh
+        bin/bootstrap.sh install
         bin/bootstrap.sh run
-    
-    - name: Install Python dependencies
-      run: |
-        python3 -m pip install --upgrade pip
-        python3 -m pip install -r requirements.txt
-    
-    - name: Make scripts executable
-      run: chmod +x extras/*
+        python3 -m pip install --upgrade pip -q
+        python3 -m pip install -r requirements.txt -q
+        chmod +x extras/*
     
     - name: Download Vault credentials
       uses: actions/download-artifact@v4
