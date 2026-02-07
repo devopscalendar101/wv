@@ -17,7 +17,6 @@ FILES=(
     "vemio_upload"
     "watermark"
     "zoomd"
-    "s3wm_update"
     "zoom_attendance"
     "s3_tool_simple.py"
 )
