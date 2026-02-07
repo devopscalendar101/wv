@@ -290,7 +290,7 @@ jobs:
           exit 1
         fi
         
-        # Source credentials
+        # Source credentials (shell interprets printf %q escaping)
         source "$CREDS_FILE"
         
         # Verify DB connection
@@ -301,8 +301,29 @@ jobs:
         }
         echo "✓ Database connection successful"
         
-        # Export to GITHUB_ENV for subsequent steps
-        cat "$CREDS_FILE" | sed 's/^export //' >> $GITHUB_ENV
+        # Export raw values to GITHUB_ENV (no shell escaping)
+        {
+          echo "PGHOST=$PGHOST"
+          echo "PGPORT=$PGPORT"
+          echo "PGDATABASE=$PGDATABASE"
+          echo "PGUSER=$PGUSER"
+          echo "PGPASSWORD=$PGPASSWORD"
+          echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID"
+          echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY"
+          echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION"
+          echo "VIMEO_ACCESS_TOKEN=$VIMEO_ACCESS_TOKEN"
+          echo "VIMEO_CLIENT_ID=$VIMEO_CLIENT_ID"
+          echo "VIMEO_CLIENT_SECRET=$VIMEO_CLIENT_SECRET"
+          echo "Z1_AI=$Z1_AI"
+          echo "Z1_CI=$Z1_CI"
+          echo "Z1_CS=$Z1_CS"
+          echo "Z2_AI=$Z2_AI"
+          echo "Z2_CI=$Z2_CI"
+          echo "Z2_CS=$Z2_CS"
+          echo "Z4_AI=$Z4_AI"
+          echo "Z4_CI=$Z4_CI"
+          echo "Z4_CS=$Z4_CS"
+        } >> $GITHUB_ENV
     
     - name: Set Parent Topic from Config
       id: parent-topic
