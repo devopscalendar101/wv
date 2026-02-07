@@ -23,13 +23,13 @@ FILES=(
 )
 
 encrypt_files() {
-    if [[ -z "$ENCRYPTION_KEY" ]]; then
-        echo "❌ ERROR: ENCRYPTION_KEY environment variable not set"
+    if [[ -z "$SCRIPTS_ENCRYPTION_KEY" ]]; then
+        echo "❌ ERROR: SCRIPTS_ENCRYPTION_KEY environment variable not set"
         echo ""
-        echo "Usage: ENCRYPTION_KEY='your-key' ./bootstrap.sh safe"
+        echo "Usage: SCRIPTS_ENCRYPTION_KEY='your-key' ./bootstrap.sh safe"
         echo ""
         echo "Or export it first:"
-        echo "  export ENCRYPTION_KEY='your-key'"
+        echo "  export SCRIPTS_ENCRYPTION_KEY='your-key'"
         echo "  ./bootstrap.sh safe"
         exit 1
     fi
@@ -43,7 +43,7 @@ encrypt_files() {
     for file in "${FILES[@]}"; do
         if [[ -f "$REPO_ROOT/bin/scripts/$file" ]]; then
             echo "  🔒 Encrypting: $file"
-            openssl enc -aes-256-cbc -salt -pbkdf2 -in "$REPO_ROOT/bin/scripts/$file" -out "$REPO_ROOT/extras/${file}.enc" -k "$ENCRYPTION_KEY"
+            openssl enc -aes-256-cbc -salt -pbkdf2 -in "$REPO_ROOT/bin/scripts/$file" -out "$REPO_ROOT/extras/${file}.enc" -k "$SCRIPTS_ENCRYPTION_KEY"
             echo "     ✓ Encrypted: bin/scripts/$file → extras/${file}.enc"
             encrypted_count=$((encrypted_count + 1))
         else
@@ -74,15 +74,15 @@ encrypt_files() {
 }
 
 decrypt_files() {
-    if [[ -z "$ENCRYPTION_KEY" ]]; then
-        echo "❌ ERROR: ENCRYPTION_KEY environment variable not set"
+    if [[ -z "$SCRIPTS_ENCRYPTION_KEY" ]]; then
+        echo "❌ ERROR: SCRIPTS_ENCRYPTION_KEY environment variable not set"
         echo ""
         echo "In GitHub Actions, this should be set from secrets:"
         echo "  env:"
-        echo "    ENCRYPTION_KEY: \${{ secrets.SCRIPTS_ENCRYPTION_KEY }}"
+        echo "    SCRIPTS_ENCRYPTION_KEY: \${{ secrets.SCRIPTS_ENCRYPTION_KEY }}"
         echo ""
         echo "For local testing:"
-        echo "  export ENCRYPTION_KEY='your-key'"
+        echo "  export SCRIPTS_ENCRYPTION_KEY='your-key'"
         echo "  ./bootstrap.sh run"
         exit 1
     fi
@@ -96,7 +96,7 @@ decrypt_files() {
     for file in "${FILES[@]}"; do
         if [[ -f "$REPO_ROOT/extras/${file}.enc" ]]; then
             echo "  🔓 Decrypting: $file"
-            openssl enc -aes-256-cbc -d -pbkdf2 -in "$REPO_ROOT/extras/${file}.enc" -out "$REPO_ROOT/extras/$file" -k "$ENCRYPTION_KEY"
+            openssl enc -aes-256-cbc -d -pbkdf2 -in "$REPO_ROOT/extras/${file}.enc" -out "$REPO_ROOT/extras/$file" -k "$SCRIPTS_ENCRYPTION_KEY"
             chmod +x "$REPO_ROOT/extras/$file" 2>/dev/null || true
             echo "     ✓ Decrypted: extras/${file}.enc → extras/$file"
             decrypted_count=$((decrypted_count + 1))
@@ -185,11 +185,11 @@ Usage: bootstrap.sh {safe|run|install}
 
 Commands:
   safe    - Encrypt sensitive files and remove originals
-            Requires: ENCRYPTION_KEY environment variable
+            Requires: SCRIPTS_ENCRYPTION_KEY environment variable
             Run locally before committing to repo
           
   run     - Decrypt sensitive files for use
-            Requires: ENCRYPTION_KEY environment variable
+            Requires: SCRIPTS_ENCRYPTION_KEY environment variable
             Run in GitHub Actions workflow
 
   install - Install all required system dependencies
@@ -198,7 +198,7 @@ Commands:
 
 Examples:
   # Encrypt before push (local)
-  export ENCRYPTION_KEY='your-strong-key-here'
+  export SCRIPTS_ENCRYPTION_KEY='your-strong-key-here'
   ./bootstrap.sh safe
   git add extras/*.enc
   git push
@@ -206,14 +206,14 @@ Examples:
   # Decrypt in GitHub Actions (workflow)
   - name: Decrypt scripts
     env:
-      ENCRYPTION_KEY: \${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
+      SCRIPTS_ENCRYPTION_KEY: \${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
     run: |
       cd github_actions
       ./bootstrap.sh run
 
 Environment Variables:
-  ENCRYPTION_KEY  - Encryption/decryption key (required)
-                    Store in GitHub Secrets as SCRIPTS_ENCRYPTION_KEY
+  SCRIPTS_ENCRYPTION_KEY  - Encryption/decryption key (required)
+                            Store in GitHub Secrets as SCRIPTS_ENCRYPTION_KEY
 
 Files managed:
 $(printf "  - %s\n" "${FILES[@]}")
