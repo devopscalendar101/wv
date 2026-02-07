@@ -255,6 +255,22 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
+    - name: System Info
+      run: |
+        echo "┌──────────────────────────────────────────┐"
+        echo "│           RUNNER SYSTEM INFO              │"
+        echo "├──────────────────────────────────────────┤"
+        printf "│ %-40s │\n" "OS: $(lsb_release -ds 2>/dev/null || cat /etc/os-release | grep PRETTY_NAME | cut -d= -f2 | tr -d '\"')"
+        printf "│ %-40s │\n" "KERNEL: $(uname -r)"
+        printf "│ %-40s │\n" "CPU: $(lscpu | grep 'Model name' | sed 's/Model name:\s*//')"
+        printf "│ %-40s │\n" "CPU_CORES: $(nproc) cores"
+        printf "│ %-40s │\n" "MEMORY: $(free -h | awk '/Mem:/{print $2}') total"
+        printf "│ %-40s │\n" "STORAGE: $(df -h / | awk 'NR==2{print $4}') available / $(df -h / | awk 'NR==2{print $2}') total"
+        echo "├──────────────────────────────────────────┤"
+        printf "│ %-40s │\n" "BATCH: ${{ matrix.batch_name }}"
+        printf "│ %-40s │\n" "DATE: ${{ matrix.class_date }}"
+        echo "└──────────────────────────────────────────┘"
+    
     - name: Install all dependencies
       run: |
         chmod +x bin/bootstrap.sh
@@ -344,7 +360,9 @@ jobs:
         echo "topic=$TOPIC" >> $GITHUB_OUTPUT
     
     - name: Run Watermark Video Pipeline
+      id: pipeline
       run: |
+        set +e
         extras/watermark_pipeline.sh \
           "class-recordings-itdefined" \
           "${{ matrix.batch_name }}" \
@@ -368,6 +386,17 @@ jobs:
           "$VIMEO_CLIENT_ID" \
           "$VIMEO_CLIENT_SECRET" \
           "${{ github.event.inputs.vemio_delete || 'false' }}"
+        PIPELINE_EXIT=$?
+        if [ $PIPELINE_EXIT -eq 2 ]; then
+          echo "::warning::No video available for ${{ matrix.batch_name }} on ${{ matrix.class_date }} (no class or Zoom still processing)"
+          echo "status=warning" >> $GITHUB_OUTPUT
+        elif [ $PIPELINE_EXIT -ne 0 ]; then
+          echo "::error::Pipeline failed for ${{ matrix.batch_name }} on ${{ matrix.class_date }}"
+          echo "status=failed" >> $GITHUB_OUTPUT
+          exit 1
+        else
+          echo "status=success" >> $GITHUB_OUTPUT
+        fi
     
     - name: Upload artifacts (if failed)
       if: failure()
