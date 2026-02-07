@@ -89,6 +89,7 @@ s3_exists() {
 log_step() { echo -e "    ${CYAN}$1${NC}"; }
 log_ok()   { echo -e "            --> ${GREEN}$1${NC}"; }
 log_skip() { echo -e "            --> ${YELLOW}SKIP: $1${NC}"; }
+log_warn() { echo -e "            --> ${YELLOW}WARNING: $1${NC}"; }
 log_err()  { echo -e "            --> ${RED}ERROR: $1${NC}"; }
 log_info() { echo -e "            --> $1"; }
 
@@ -248,8 +249,8 @@ convert_upload() {
 		if [[ -f "$original_video_full" ]]; then
 			log_ok "Downloaded from Zoom: $(get_file_size "$original_video_full")"
 		else
-			log_err "Zoom download failed - no video at $original_video_full"
-			return 1
+			log_warn "No video available from Zoom (no class taken or still processing)"
+			return 2
 		fi
 	fi
 
@@ -395,3 +396,15 @@ echo "    CONFIGURATIONS:
 	DELETE_CLASS: $delete_class"
 
 convert_upload
+pipeline_rc=$?
+
+if [[ $pipeline_rc -eq 2 ]]; then
+	echo -e "\n${YELLOW}⚠️  RESULT: NO VIDEO — No class or Zoom still processing (${log_stamp})${NC}"
+	exit 2
+elif [[ $pipeline_rc -ne 0 ]]; then
+	echo -e "\n${RED}❌ RESULT: PIPELINE FAILED (${log_stamp})${NC}"
+	exit 1
+else
+	echo -e "\n${GREEN}✅ RESULT: PIPELINE COMPLETE (${log_stamp})${NC}"
+	exit 0
+fi
