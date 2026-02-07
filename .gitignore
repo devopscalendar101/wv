@@ -14,7 +14,6 @@ scripts/s3_tool_simple.py
 !scripts/watermark_pipeline.sh
 !batch-config.json
 !requirements.txt
-!*.md
 !*.yml
 !*.sh
 
@@ -37,3 +36,9 @@ test_pipeline_locally.sh
 .tmp/
 *.log
 .pytest_cache/
+
+# Documentation (optional - ignore or commit as needed)
+*.md
+
+# GitHub workflows directory (workflows are in root yml files)
+.github/
