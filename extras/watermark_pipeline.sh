@@ -25,16 +25,15 @@ webinar_id="$9"
 webinar_email="${10}"
 class_date="${11}"
 s3_delete_original="${12}"
-delete_local_videos="${13}"
-delete_attendance="${14}"
-use_local_video="${15}"
-delete_class="${16}"
-s3_delete_watermark="${17}"
-use_s3_original="${18}"
-vimeo_access_token="${19}"
-vimeo_client_id="${20}"
-vimeo_client_secret="${21}"
-vemio_delete="${22}"
+delete_attendance="${13}"
+use_local_video="${14}"
+delete_class="${15}"
+s3_delete_watermark="${16}"
+use_s3_original="${17}"
+vimeo_access_token="${18}"
+vimeo_client_id="${19}"
+vimeo_client_secret="${20}"
+vemio_delete="${21}"
 
 base_path="${HOME}/.tmp"
 mkdir -p "$base_path"
@@ -367,8 +366,8 @@ convert_upload() {
 	# STEP 7: Update attendance
 	# ══════════════════════════════════════════
 
-	# log_step "STEP_7: Update attendance (${log_stamp})"
-	# update_attendance
+	log_step "STEP_7: Update attendance (${log_stamp})"
+	update_attendance
 
 	echo -e "-----------------------------------------------------------------------------------------"
 }
@@ -391,7 +390,6 @@ echo "    CONFIGURATIONS:
 	S3_DELETE_ORIGINAL: $s3_delete_original
 	S3_DELETE_WATERMARK: $s3_delete_watermark
 	VEMIO_DELETE: $vemio_delete
-	DELETE_LOCAL_VIDEOS: $delete_local_videos
 	DELETE_ATTENDANCE: $delete_attendance
 	DELETE_CLASS: $delete_class"
 
