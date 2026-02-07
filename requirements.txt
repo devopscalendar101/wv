@@ -14,5 +14,14 @@ requests>=2.31.0
 urllib3>=2.0.0
 wget>=3.2
 
+# Date/time utilities
+python-dateutil>=2.8.0
+
+# Terminal colors
+colorama>=0.4.6
+
+# File utilities
+hurry.filesize>=0.9
+
 # Optional: Progress bars (if needed)
 tqdm>=4.66.0
