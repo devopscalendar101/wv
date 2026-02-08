@@ -285,15 +285,12 @@ jobs:
         echo "└──────────────────────────────────────────┘"
     
     - name: Setup Environment
-      env:
-        SCRIPTS_ENCRYPTION_KEY: ${{ secrets.SCRIPTS_ENCRYPTION_KEY }}
       run: |
         chmod +x wv_source/bin/bootstrap.sh
         wv_source/bin/bootstrap.sh install
-        wv_source/bin/bootstrap.sh run
         python3 -m pip install --upgrade pip -q
         python3 -m pip install -r wv_source/conf/requirements.txt -q
-        chmod +x wv_source/extras/*
+        chmod +x wv_source/bin/*
     
     - name: Download Vault credentials
       uses: actions/download-artifact@v4
@@ -356,7 +353,7 @@ jobs:
         echo "Assets downloaded:"
         ls -lh "$WM_DIR/"
         echo "WM_PATH=$WM_DIR" >> $GITHUB_ENV
-        echo "PATH=$GITHUB_WORKSPACE/wv_source/extras:$PATH" >> $GITHUB_ENV
+        echo "PATH=$GITHUB_WORKSPACE/wv_source/bin:$PATH" >> $GITHUB_ENV
 
     - name: Set Zoom Email from Account
       id: zoom-email
@@ -421,7 +418,7 @@ jobs:
       id: pipeline
       run: |
         set +e
-        wv_source/extras/watermark_pipeline.sh \
+        wv_source/bin/watermark_pipeline.sh \
           "class-recordings-itdefined" \
           "${{ matrix.batch_name }}" \
           "${{ matrix.itd_zoom_id }}" \
