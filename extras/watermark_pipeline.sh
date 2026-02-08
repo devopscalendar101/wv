@@ -4,7 +4,7 @@
 pwd_path="$PWD"
 bucket_original="${VIDEO_BUCKET_ORIGINAL:-class-recordings-itdefined-original}"
 batch="$2"
-wm_path='/home/drive/watermark'
+export WM_PATH="${WM_PATH:-/home/drive/watermark}"
 
 # Color codes
 GREEN='\033[0;32m'
