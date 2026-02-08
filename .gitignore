@@ -1,11 +1,4 @@
-# Encrypted scripts in extras/ (committed encrypted, ignored after decryption in CI)
-# Git tracks these as encrypted files initially
-
-# Commit these public files
-!extras/watermark_pipeline.sh
-!conf/
-!*.yml
-!*.sh
+# Workflow-only repo - source code in private wv_source repo
 
 # Local development
 .venv/
@@ -13,26 +6,5 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# Sensitive local config files (DO NOT COMMIT)
-retrieve_credentials.sh
-run_pipeline_locally.sh
-run_local.sh
-test_pipeline_locally.sh
-build.sh
-.env.local
-encrypt.sh
-decrypt.sh
-
-# Source code for local development (unencrypted)
-bin/scripts/
-
-# Local overrides (optional - commit template instead)
-# pipeline_config.json
-
-# Test/temp files
-.tmp/
-*.log
-.pytest_cache/
-
-# Documentation (optional - ignore or commit as needed)
-*.md
+# Documentation
+!README.md
