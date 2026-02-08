@@ -3,8 +3,7 @@
 
 # Commit these public files
 !extras/watermark_pipeline.sh
-!batch-config.json
-!requirements.txt
+!conf/
 !*.yml
 !*.sh
 
@@ -17,6 +16,7 @@ __pycache__/
 # Sensitive local config files (DO NOT COMMIT)
 retrieve_credentials.sh
 run_pipeline_locally.sh
+run_local.sh
 test_pipeline_locally.sh
 build.sh
 .env.local

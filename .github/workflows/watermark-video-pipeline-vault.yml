@@ -194,7 +194,7 @@ jobs:
       - name: Generate matrix from batch config
         id: set-matrix
         run: |
-          CONFIG=$(cat conf/batch-config.json)
+          CONFIG=$(cat conf/config.json)
           BATCHES=$(echo "$CONFIG" | jq -c '[.batches[] | select(.enabled == true)]')
           PARENT_TOPICS=$(echo "$CONFIG" | jq -c '.parent_topics')
           
@@ -252,7 +252,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: pip-${{ hashFiles('requirements.txt') }}
+        key: pip-${{ hashFiles('conf/requirements.txt') }}
     
     - name: System Info
       run: |
@@ -278,7 +278,7 @@ jobs:
         bin/bootstrap.sh install
         bin/bootstrap.sh run
         python3 -m pip install --upgrade pip -q
-        python3 -m pip install -r requirements.txt -q
+        python3 -m pip install -r conf/requirements.txt -q
         chmod +x extras/*
     
     - name: Download Vault credentials
@@ -336,7 +336,7 @@ jobs:
     - name: Set Parent Topic from Config
       id: parent-topic
       run: |
-        # Parent topic comes from batch-config.json via matrix
+        # Parent topic comes from config.json via matrix
         TOPIC="${{ matrix.parent_topic }}"
         echo "parent_topic=$TOPIC" >> $GITHUB_OUTPUT
         echo "Using parent topic: $TOPIC"

@@ -50,5 +50,16 @@
       "parent_topic_param": "NGO_DS_2025_PARENT_TOPIC",
       "enabled": false
     }
-  ]
+  ],
+  "dates": {
+    "class_date_list": ""
+  },
+  "options": {
+    "use_s3_original": false,
+    "s3_delete_original": false,
+    "s3_delete_watermark": false,
+    "vemio_delete": false,
+    "delete_attendance": false,
+    "delete_class": false
+  }
 }
