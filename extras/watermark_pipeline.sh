@@ -26,13 +26,12 @@ webinar_email="${10}"
 class_date="${11}"
 s3_delete_original="${12}"
 delete_attendance="${13}"
-delete_class="${14}"
-s3_delete_watermark="${15}"
-use_s3_original="${16}"
-vimeo_access_token="${17}"
-vimeo_client_id="${18}"
-vimeo_client_secret="${19}"
-vemio_delete="${20}"
+s3_delete_watermark="${14}"
+use_s3_original="${15}"
+vimeo_access_token="${16}"
+vimeo_client_id="${17}"
+vimeo_client_secret="${18}"
+vemio_delete="${19}"
 
 base_path="${HOME}/.tmp"
 mkdir -p "$base_path"
@@ -107,11 +106,6 @@ update_class() {
 		video_source="vimeo"
 	elif [[ "$s3_success" == "true" ]]; then
 		video_source="aws_s3"
-	fi
-
-	if [[ "$delete_class" == 'true' ]]; then
-		log_info "Deleting existing class record (${log_stamp})"
-		/usr/bin/psql -qtAX -c "DELETE FROM public.course_trainingmaterial WHERE course_id='$course_id' AND webinar_id='$itd_webinar_id' AND date_of_training='$class_formated_date'";
 	fi
 
 	local existing=$(/usr/bin/psql -qtAX -c "SELECT topic FROM public.course_trainingmaterial WHERE course_id='$course_id' AND webinar_id='$itd_webinar_id' AND date_of_training='$class_formated_date'")
@@ -377,7 +371,6 @@ echo "    CONFIGURATIONS:
 	S3_DELETE_WATERMARK: $s3_delete_watermark
 	VEMIO_DELETE: $vemio_delete
 	DELETE_ATTENDANCE: $delete_attendance
-	DELETE_CLASS: $delete_class"
 
 convert_upload
 pipeline_rc=$?
