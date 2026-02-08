@@ -370,7 +370,6 @@ jobs:
         VEMIO_DEL="${{ github.event.inputs.vemio_delete || 'false' }}"
         USE_S3="${{ github.event.inputs.use_s3_original || 'false' }}"
         DEL_ATT="${{ github.event.inputs.delete_attendance || 'false' }}"
-        DEL_CLASS="${{ github.event.inputs.delete_class || 'false' }}"
 
         icon() { [[ "$1" == "true" ]] && echo "🟢 ON" || echo "⚪ OFF"; }
 
@@ -382,7 +381,6 @@ jobs:
         printf "│  %-6s  %-36s │\n" "$(icon $S3_DEL_ORIG)" "s3_delete_original (re-download)"
         printf "│  %-6s  %-36s │\n" "$(icon $S3_DEL_WM)" "s3_delete_watermark (re-watermark)"
         printf "│  %-6s  %-36s │\n" "$(icon $VEMIO_DEL)" "vemio_delete (re-upload to Vimeo)"
-        printf "│  %-6s  %-36s │\n" "$(icon $DEL_CLASS)" "delete_class (re-create DB record)"
         printf "│  %-6s  %-36s │\n" "$(icon $DEL_ATT)" "delete_attendance (re-fetch)"
         echo "└──────────────────────────────────────────────┘"
 
@@ -391,7 +389,6 @@ jobs:
         [[ "$S3_DEL_ORIG" == "true" ]] && ACTIVE=$((ACTIVE+1))
         [[ "$S3_DEL_WM" == "true" ]] && ACTIVE=$((ACTIVE+1))
         [[ "$VEMIO_DEL" == "true" ]] && ACTIVE=$((ACTIVE+1))
-        [[ "$DEL_CLASS" == "true" ]] && ACTIVE=$((ACTIVE+1))
         [[ "$DEL_ATT" == "true" ]] && ACTIVE=$((ACTIVE+1))
 
         if [[ $ACTIVE -ge 3 ]]; then
@@ -419,7 +416,6 @@ jobs:
           "${{ matrix.class_date }}" \
           "${{ github.event.inputs.s3_delete_original || 'false' }}" \
           "${{ github.event.inputs.delete_attendance || 'false' }}" \
-          "${{ github.event.inputs.delete_class || 'false' }}" \
           "${{ github.event.inputs.s3_delete_watermark || 'false' }}" \
           "${{ github.event.inputs.use_s3_original || 'false' }}" \
           "$VIMEO_ACCESS_TOKEN" \

@@ -7,8 +7,7 @@
         "s3_delete_original": false,
         "s3_delete_watermark": false,
         "vemio_delete": false,
-        "delete_attendance": false,
-        "delete_class": false
+        "delete_attendance": false
     },
     "batches": [
         {
