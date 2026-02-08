@@ -1,5 +1,9 @@
 name: Watermark Video Pipeline - With Vault
 
+concurrency:
+  group: watermark-video-pipeline
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
