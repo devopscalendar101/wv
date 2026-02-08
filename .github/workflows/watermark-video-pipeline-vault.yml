@@ -196,7 +196,6 @@ jobs:
         run: |
           CONFIG=$(cat conf/config.json)
           BATCHES=$(echo "$CONFIG" | jq -c '[.batches[] | select(.enabled == true)]')
-          PARENT_TOPICS=$(echo "$CONFIG" | jq -c '.parent_topics')
           
           if [ -n "${{ github.event.inputs.class_date_list }}" ]; then
             CLASS_DATES="${{ github.event.inputs.class_date_list }}"
@@ -206,7 +205,6 @@ jobs:
           
           MATRIX=$(jq -n -c \
             --argjson batches "$BATCHES" \
-            --argjson parent_topics "$PARENT_TOPICS" \
             --arg dates "$CLASS_DATES" \
             '{
               include: [
@@ -219,9 +217,7 @@ jobs:
                   batch_id: $batch.batch_id,
                   zoom_id: $batch.zoom_id,
                   zoom_account: $batch.zoom_account,
-                  zoom_email: $batch.zoom_email,
-                  parent_topic_param: $batch.parent_topic_param,
-                  parent_topic: $parent_topics[$batch.parent_topic_param],
+                  parent_topic: $batch.parent_topic,
                   class_date: $date
                 }
               ]
@@ -333,13 +329,19 @@ jobs:
           echo "ITD_PASS=${{ secrets.ITD_PASS }}"
         } >> $GITHUB_ENV
     
-    - name: Set Parent Topic from Config
-      id: parent-topic
+    - name: Set Zoom Email from Account
+      id: zoom-email
       run: |
-        # Parent topic comes from config.json via matrix
-        TOPIC="${{ matrix.parent_topic }}"
-        echo "parent_topic=$TOPIC" >> $GITHUB_OUTPUT
-        echo "Using parent topic: $TOPIC"
+        # Map zoom_account to email
+        case "${{ matrix.zoom_account }}" in
+          Z1) ZOOM_EMAIL="itdefined.org@gmail.com" ;;
+          Z2) ZOOM_EMAIL="itdefined.org2@gmail.com" ;;
+          Z3) ZOOM_EMAIL="itdefined.org3@gmail.com" ;;
+          Z4) ZOOM_EMAIL="itdefined.org4@gmail.com" ;;
+          *) ZOOM_EMAIL="unknown@gmail.com" ;;
+        esac
+        echo "zoom_email=$ZOOM_EMAIL" >> $GITHUB_OUTPUT
+        echo "Using zoom email: $ZOOM_EMAIL"
     
     - name: Generate topic from date
       id: topic
@@ -401,9 +403,9 @@ jobs:
           "${{ steps.topic.outputs.topic }}" \
           "${{ matrix.course_id }}" \
           "${{ matrix.batch_id }}" \
-          "${{ steps.parent-topic.outputs.parent_topic }}" \
+          "${{ matrix.parent_topic }}" \
           "${{ matrix.zoom_id }}" \
-          "${{ matrix.zoom_email }}" \
+          "${{ steps.zoom-email.outputs.zoom_email }}" \
           "${{ matrix.class_date }}" \
           "${{ github.event.inputs.s3_delete_original || 'false' }}" \
           "${{ github.event.inputs.delete_attendance || 'false' }}" \
