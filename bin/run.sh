@@ -12,13 +12,12 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Files to decrypt
+# Files to decrypt (in-place)
 FILES_TO_DECRYPT=(
     "extras/s3_tool"
     "extras/vemio_upload"
     "extras/watermark"
     "extras/zoomd"
-    "extras/s3wm_update"
     "extras/zoom_attendance"
     "extras/s3_tool_simple.py"
 )
@@ -26,14 +25,16 @@ FILES_TO_DECRYPT=(
 echo "🔓 Decrypting sensitive files..."
 
 for file in "${FILES_TO_DECRYPT[@]}"; do
-    if [[ -f "$SCRIPT_DIR/${file}.enc" ]]; then
+    if [[ -f "$SCRIPT_DIR/$file" ]]; then
         echo "  Decrypting: $file"
-        # Decrypt using AES-256-CBC
-        openssl enc -aes-256-cbc -d -pbkdf2 -in "$SCRIPT_DIR/${file}.enc" -out "$SCRIPT_DIR/$file" -k "$SCRIPTS_ENCRYPTION_KEY"
+        # Decrypt in-place using AES-256-CBC
+        local temp_file="${SCRIPT_DIR}/${file}.decrypted"
+        openssl enc -aes-256-cbc -d -pbkdf2 -in "$SCRIPT_DIR/$file" -out "$temp_file" -k "$SCRIPTS_ENCRYPTION_KEY"
+        mv "$temp_file" "$SCRIPT_DIR/$file"
         chmod +x "$SCRIPT_DIR/$file" 2>/dev/null || true
         echo "    ✓ Decrypted: $file"
     else
-        echo "  WARNING: Encrypted file not found: ${file}.enc"
+        echo "  WARNING: Encrypted file not found: $file"
     fi
 done
 
