@@ -329,6 +329,16 @@ jobs:
           echo "ITD_PASS=${{ secrets.ITD_PASS }}"
         } >> $GITHUB_ENV
     
+    - name: Download watermark assets from S3
+      run: |
+        WM_DIR="$HOME/.watermark-assets"
+        mkdir -p "$WM_DIR"
+        echo "Downloading watermark assets from S3..."
+        aws s3 cp s3://class-recordings-itdefined/watermark-assets/ "$WM_DIR/" --recursive --quiet
+        echo "Assets downloaded:"
+        ls -lh "$WM_DIR/"
+        echo "WM_PATH=$WM_DIR" >> $GITHUB_ENV
+
     - name: Set Zoom Email from Account
       id: zoom-email
       run: |
