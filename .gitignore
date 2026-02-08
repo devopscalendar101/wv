@@ -1,13 +1,5 @@
-# Prevent committing unencrypted scripts (only .enc versions should be committed)
-extras/s3_tool
-extras/vemio_upload
-extras/watermark
-extras/zoomd
-extras/zoom_attendance
-extras/s3_tool_simple.py
-
-# But DO commit the encrypted versions
-!extras/*.enc
+# Encrypted scripts in extras/ (committed encrypted, ignored after decryption in CI)
+# Git tracks these as encrypted files initially
 
 # Commit these public files
 !extras/watermark_pipeline.sh

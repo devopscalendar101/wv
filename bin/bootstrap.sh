@@ -42,12 +42,12 @@ encrypt_files() {
     for file in "${FILES[@]}"; do
         if [[ -f "$REPO_ROOT/bin/scripts/$file" ]]; then
             echo "  🔒 Encrypting: $file"
-            openssl enc -aes-256-cbc -salt -pbkdf2 -in "$REPO_ROOT/bin/scripts/$file" -out "$REPO_ROOT/extras/${file}.enc" -k "$SCRIPTS_ENCRYPTION_KEY"
-            echo "     ✓ Encrypted: bin/scripts/$file → extras/${file}.enc"
+            openssl enc -aes-256-cbc -salt -pbkdf2 -in "$REPO_ROOT/bin/scripts/$file" -out "$REPO_ROOT/extras/${file}" -k "$SCRIPTS_ENCRYPTION_KEY"
+            echo "     ✓ Encrypted: bin/scripts/$file → extras/$file"
             encrypted_count=$((encrypted_count + 1))
         else
-            if [[ -f "$REPO_ROOT/extras/${file}.enc" ]]; then
-                echo "  ⏭️  Already encrypted: extras/${file}.enc"
+            if [[ -f "$REPO_ROOT/extras/${file}" ]]; then
+                echo "  ⏭️  Already encrypted: extras/$file"
                 skipped_count=$((skipped_count + 1))
             else
                 echo "  ⚠️  Source file not found: bin/scripts/$file"
@@ -61,8 +61,8 @@ encrypt_files() {
     echo "   Already encrypted: $skipped_count files"
     echo ""
     echo "Next steps:"
-    echo "  1. Commit the .enc files:"
-    echo "     git add extras/*.enc"
+    echo "  1. Commit the encrypted files:"
+    echo "     git add extras/*"
     echo "     git commit -m 'Update encrypted scripts'"
     echo "     git push"
     echo ""
@@ -93,11 +93,14 @@ decrypt_files() {
     local skipped_count=0
 
     for file in "${FILES[@]}"; do
-        if [[ -f "$REPO_ROOT/extras/${file}.enc" ]]; then
+        local source_file="$REPO_ROOT/extras/${file}"
+        local temp_decrypt="${source_file}.decrypted"
+        if [[ -f "$source_file" ]]; then
             echo "  🔓 Decrypting: $file"
-            openssl enc -aes-256-cbc -d -pbkdf2 -in "$REPO_ROOT/extras/${file}.enc" -out "$REPO_ROOT/extras/$file" -k "$SCRIPTS_ENCRYPTION_KEY"
-            chmod +x "$REPO_ROOT/extras/$file" 2>/dev/null || true
-            echo "     ✓ Decrypted: extras/${file}.enc → extras/$file"
+            openssl enc -aes-256-cbc -d -pbkdf2 -in "$source_file" -out "$temp_decrypt" -k "$SCRIPTS_ENCRYPTION_KEY"
+            mv "$temp_decrypt" "$source_file"
+            chmod +x "$source_file" 2>/dev/null || true
+            echo "     ✓ Decrypted: extras/$file (in-place)"
             decrypted_count=$((decrypted_count + 1))
         else
             if [[ -f "$REPO_ROOT/extras/$file" ]]; then
