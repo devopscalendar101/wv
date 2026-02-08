@@ -1,10 +1,4 @@
 {
-  "parent_topics": {
-    "DEVOPS_DEC_2025_PARENT_TOPIC": "BASH Scripting",
-    "DEVOPS_JULY_2025_PARENT_TOPIC": "Kubernetes",
-    "NGO_DS_2025_PARENT_TOPIC": "Data Analytics",
-    "CYBERSECURITY_2025_PARENT_TOPIC": "Introductions"
-  },
   "batches": [
     {
       "course_id": "2",
@@ -13,8 +7,7 @@
       "batch_id": "40",
       "zoom_id": "85908177452",
       "zoom_account": "Z2",
-      "zoom_email": "itdefined.org2@gmail.com",
-      "parent_topic_param": "DEVOPS_DEC_2025_PARENT_TOPIC",
+      "parent_topic": "BASH Scripting",
       "enabled": true
     },
     {
@@ -24,8 +17,7 @@
       "batch_id": "41",
       "zoom_id": "81682381743",
       "zoom_account": "Z4",
-      "zoom_email": "itdefined.org4@gmail.com",
-      "parent_topic_param": "CYBERSECURITY_2025_PARENT_TOPIC",
+      "parent_topic": "Introductions",
       "enabled": true
     },
     {
@@ -35,8 +27,7 @@
       "batch_id": "35",
       "zoom_id": "83784274158",
       "zoom_account": "Z4",
-      "zoom_email": "itdefined.org4@gmail.com",
-      "parent_topic_param": "DEVOPS_JULY_2025_PARENT_TOPIC",
+      "parent_topic": "Kubernetes",
       "enabled": false
     },
     {
@@ -46,8 +37,7 @@
       "batch_id": "43",
       "zoom_id": "83380367141",
       "zoom_account": "Z2",
-      "zoom_email": "itdefined.org2@gmail.com",
-      "parent_topic_param": "NGO_DS_2025_PARENT_TOPIC",
+      "parent_topic": "Data Analytics",
       "enabled": false
     }
   ],
