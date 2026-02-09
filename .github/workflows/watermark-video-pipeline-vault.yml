@@ -432,6 +432,7 @@ jobs:
           "${{ matrix.class_date }}" \
           "${{ github.event.inputs.s3_delete_original || 'false' }}" \
           "${{ github.event.inputs.delete_attendance || 'false' }}" \
+          "${{ github.event.inputs.delete_class || 'false' }}" \
           "${{ github.event.inputs.s3_delete_watermark || 'false' }}" \
           "${{ github.event.inputs.use_s3_original || 'false' }}" \
           "$VIMEO_ACCESS_TOKEN" \
