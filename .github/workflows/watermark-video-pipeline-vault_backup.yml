@@ -340,7 +340,8 @@ jobs:
           echo "Z4_AI=$Z4_AI"
           echo "Z4_CI=$Z4_CI"
           echo "Z4_CS=$Z4_CS"
-          echo "ITD_TOKEN=${{ secrets.ITD_TOKEN }}"
+          echo "ITD_USER=${{ secrets.ITD_USER }}"
+          echo "ITD_PASS=${{ secrets.ITD_PASS }}"
         } >> $GITHUB_ENV
     
     - name: Download watermark assets from S3
