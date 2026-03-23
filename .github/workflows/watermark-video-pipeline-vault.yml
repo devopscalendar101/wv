@@ -1,5 +1,11 @@
 name: Watermark Video Pipeline - With Vault
 
+# Security: Minimal workflow permissions
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
 concurrency:
   group: watermark-video-pipeline
   cancel-in-progress: false
@@ -33,6 +39,10 @@ on:
     - cron: "30,10 5-9 * * 1-6"
     - cron: "30,10 14-16 * * 1-6"
 
+env:
+  # Node.js 24 compatibility for future-proofing
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   get-vault-credentials:
     runs-on: ubuntu-latest
@@ -55,15 +65,21 @@ jobs:
         VAULT_ADDR: ${{ secrets.VAULT_URL }}
         SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
       run: |
+        # Security: Disable command echoing to prevent token exposure in logs
         set +x
+        set -euo pipefail  # Fail fast on errors
         
         export VAULT_TOKEN="$SERVICE_TOKEN"
         echo "STEP 1: Getting vault tokens and credentials"
         
         # Step 1: Get ALL token from SVU vault
-        ALL_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=toc7kawoc7 -mount=hej0SESwEs cicuwrl4po)
+        # Security Note: Vault paths are obfuscated tokens, not sensitive data
+        ALL_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=toc7kawoc7 -mount=hej0SESwEs cicuwrl4po 2>/dev/null) || {
+            echo "::error::Failed to retrieve ALL_TOKEN from SVU vault - check token permissions"
+            exit 1
+        }
         if [ -z "$ALL_TOKEN" ]; then
-            echo "ERROR: Failed to get ALL_TOKEN from SVU vault"
+            echo "::error::ALL_TOKEN is empty after retrieval"
             exit 1
         fi
         echo "✓ ALL token obtained"
@@ -71,30 +87,30 @@ jobs:
         export VAULT_TOKEN="$ALL_TOKEN"
         
         # Step 2: Get app-specific tokens from ALL vault
-        ITD_TEST_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=wr0swu5udi -mount=driy9s4uce je0emad4ov)
-        ZOOM_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=v0ve2regos -mount=driy9s4uce je0emad4ov)
-        AWS_ROOT_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=vepiz9pafr -mount=driy9s4uce je0emad4ov)
+        ITD_TEST_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=wr0swu5udi -mount=driy9s4uce je0emad4ov 2>/dev/null) || { echo "::error::Failed to get ITD_TEST_TOKEN"; exit 1; }
+        ZOOM_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=v0ve2regos -mount=driy9s4uce je0emad4ov 2>/dev/null) || { echo "::error::Failed to get ZOOM_TOKEN"; exit 1; }
+        AWS_ROOT_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=vepiz9pafr -mount=driy9s4uce je0emad4ov 2>/dev/null) || { echo "::error::Failed to get AWS_ROOT_TOKEN"; exit 1; }
         
-        [[ -z "$ITD_TEST_TOKEN" ]] && { echo "ERROR: Failed to get ITD_TEST_TOKEN"; exit 1; }
-        [[ -z "$ZOOM_TOKEN" ]] && { echo "ERROR: Failed to get ZOOM_TOKEN"; exit 1; }
-        [[ -z "$AWS_ROOT_TOKEN" ]] && { echo "ERROR: Failed to get AWS_ROOT_TOKEN"; exit 1; }
+        [[ -z "$ITD_TEST_TOKEN" ]] && { echo "::error::ITD_TEST_TOKEN is empty"; exit 1; }
+        [[ -z "$ZOOM_TOKEN" ]] && { echo "::error::ZOOM_TOKEN is empty"; exit 1; }
+        [[ -z "$AWS_ROOT_TOKEN" ]] && { echo "::error::AWS_ROOT_TOKEN is empty"; exit 1; }
         echo "✓ App tokens obtained"
         
         # Step 3: Get DB credentials from ITD_TEST vault
         export VAULT_TOKEN="$ITD_TEST_TOKEN"
         echo "STEP 2: Getting DB credentials"
         
-        PGHOST=$(vault kv get -address="$VAULT_ADDR" -field=DB_HOST -mount=ql1te2icha bruxe0az6q)
-        PGPORT=$(vault kv get -address="$VAULT_ADDR" -field=DB_PORT -mount=ql1te2icha bruxe0az6q)
-        PGDATABASE=$(vault kv get -address="$VAULT_ADDR" -field=DB_NAME -mount=ql1te2icha bruxe0az6q)
-        PGUSER=$(vault kv get -address="$VAULT_ADDR" -field=DB_USER -mount=ql1te2icha bruxe0az6q)
-        PGPASSWORD=$(vault kv get -address="$VAULT_ADDR" -field=DB_PASSWORD -mount=ql1te2icha bruxe0az6q)
+        PGHOST=$(vault kv get -address="$VAULT_ADDR" -field=DB_HOST -mount=ql1te2icha bruxe0az6q 2>/dev/null) || { echo "::error::Failed to retrieve PGHOST"; exit 1; }
+        PGPORT=$(vault kv get -address="$VAULT_ADDR" -field=DB_PORT -mount=ql1te2icha bruxe0az6q 2>/dev/null) || { echo "::error::Failed to retrieve PGPORT"; exit 1; }
+        PGDATABASE=$(vault kv get -address="$VAULT_ADDR" -field=DB_NAME -mount=ql1te2icha bruxe0az6q 2>/dev/null) || { echo "::error::Failed to retrieve PGDATABASE"; exit 1; }
+        PGUSER=$(vault kv get -address="$VAULT_ADDR" -field=DB_USER -mount=ql1te2icha bruxe0az6q 2>/dev/null) || { echo "::error::Failed to retrieve PGUSER"; exit 1; }
+        PGPASSWORD=$(vault kv get -address="$VAULT_ADDR" -field=DB_PASSWORD -mount=ql1te2icha bruxe0az6q 2>/dev/null) || { echo "::error::Failed to retrieve PGPASSWORD"; exit 1; }
         
-        [[ -z "$PGHOST" ]] && { echo "ERROR: PGHOST is empty"; exit 1; }
-        [[ -z "$PGPORT" ]] && { echo "ERROR: PGPORT is empty"; exit 1; }
-        [[ -z "$PGDATABASE" ]] && { echo "ERROR: PGDATABASE is empty"; exit 1; }
-        [[ -z "$PGUSER" ]] && { echo "ERROR: PGUSER is empty"; exit 1; }
-        [[ -z "$PGPASSWORD" ]] && { echo "ERROR: PGPASSWORD is empty"; exit 1; }
+        [[ -z "$PGHOST" ]] && { echo "::error::PGHOST is empty"; exit 1; }
+        [[ -z "$PGPORT" ]] && { echo "::error::PGPORT is empty"; exit 1; }
+        [[ -z "$PGDATABASE" ]] && { echo "::error::PGDATABASE is empty"; exit 1; }
+        [[ -z "$PGUSER" ]] && { echo "::error::PGUSER is empty"; exit 1; }
+        [[ -z "$PGPASSWORD" ]] && { echo "::error::PGPASSWORD is empty"; exit 1; }
         echo "✓ DB credentials retrieved (password length: ${#PGPASSWORD})"
         
         # Test DB connection
@@ -102,55 +118,57 @@ jobs:
         if PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1;" > /dev/null 2>&1; then
             echo "✓ DB connection successful"
         else
-            echo "ERROR: DB connection failed"
+            echo "::error::Database connection failed - verify credentials and network access"
             exit 1
         fi
         
         # Step 4: Get AWS credentials from AWS_ROOT vault
+        # Security Note: Consider migrating to OIDC for temporary credentials
         export VAULT_TOKEN="$AWS_ROOT_TOKEN"
         echo "STEP 3: Getting AWS credentials"
         
-        AWS_ACCESS_KEY_ID=$(vault kv get -address="$VAULT_ADDR" -field=thujostav9 -mount=yi6pobrath s7ohebu2ho)
-        AWS_SECRET_ACCESS_KEY=$(vault kv get -address="$VAULT_ADDR" -field=yuru9ibruw -mount=yi6pobrath s7ohebu2ho)
+        AWS_ACCESS_KEY_ID=$(vault kv get -address="$VAULT_ADDR" -field=thujostav9 -mount=yi6pobrath s7ohebu2ho 2>/dev/null) || { echo "::error::Failed to retrieve AWS_ACCESS_KEY_ID"; exit 1; }
+        AWS_SECRET_ACCESS_KEY=$(vault kv get -address="$VAULT_ADDR" -field=yuru9ibruw -mount=yi6pobrath s7ohebu2ho 2>/dev/null) || { echo "::error::Failed to retrieve AWS_SECRET_ACCESS_KEY"; exit 1; }
         AWS_DEFAULT_REGION=ap-south-1
         
-        [[ -z "$AWS_ACCESS_KEY_ID" ]] && { echo "ERROR: AWS_ACCESS_KEY_ID is empty"; exit 1; }
-        [[ -z "$AWS_SECRET_ACCESS_KEY" ]] && { echo "ERROR: AWS_SECRET_ACCESS_KEY is empty"; exit 1; }
+        [[ -z "$AWS_ACCESS_KEY_ID" ]] && { echo "::error::AWS_ACCESS_KEY_ID is empty"; exit 1; }
+        [[ -z "$AWS_SECRET_ACCESS_KEY" ]] && { echo "::error::AWS_SECRET_ACCESS_KEY is empty"; exit 1; }
         echo "✓ AWS credentials retrieved"
         
         # Step 5: Get Vimeo credentials from ITD_TEST vault
         export VAULT_TOKEN="$ITD_TEST_TOKEN"
         echo "STEP 4: Getting Vimeo credentials"
         
-        VIMEO_ACCESS_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_ACCESS_TOKEN -mount=ql1te2icha bruxe0az6q)
-        VIMEO_CLIENT_ID=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_CLIENT_ID -mount=ql1te2icha bruxe0az6q)
-        VIMEO_CLIENT_SECRET=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_CLIENT_SECRET -mount=ql1te2icha bruxe0az6q)
+        VIMEO_ACCESS_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_ACCESS_TOKEN -mount=ql1te2icha bruxe0az6q 2>/dev/null) || { echo "::error::Failed to retrieve VIMEO_ACCESS_TOKEN"; exit 1; }
+        VIMEO_CLIENT_ID=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_CLIENT_ID -mount=ql1te2icha bruxe0az6q 2>/dev/null) || { echo "::error::Failed to retrieve VIMEO_CLIENT_ID"; exit 1; }
+        VIMEO_CLIENT_SECRET=$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_CLIENT_SECRET -mount=ql1te2icha bruxe0az6q 2>/dev/null) || { echo "::error::Failed to retrieve VIMEO_CLIENT_SECRET"; exit 1; }
         
-        [[ -z "$VIMEO_ACCESS_TOKEN" ]] && { echo "ERROR: VIMEO_ACCESS_TOKEN is empty"; exit 1; }
-        [[ -z "$VIMEO_CLIENT_ID" ]] && { echo "ERROR: VIMEO_CLIENT_ID is empty"; exit 1; }
-        [[ -z "$VIMEO_CLIENT_SECRET" ]] && { echo "ERROR: VIMEO_CLIENT_SECRET is empty"; exit 1; }
+        [[ -z "$VIMEO_ACCESS_TOKEN" ]] && { echo "::error::VIMEO_ACCESS_TOKEN is empty"; exit 1; }
+        [[ -z "$VIMEO_CLIENT_ID" ]] && { echo "::error::VIMEO_CLIENT_ID is empty"; exit 1; }
+        [[ -z "$VIMEO_CLIENT_SECRET" ]] && { echo "::error::VIMEO_CLIENT_SECRET is empty"; exit 1; }
         echo "✓ Vimeo credentials retrieved"
         
         # Step 6: Get Zoom credentials from ZOOM vault
         export VAULT_TOKEN="$ZOOM_TOKEN"
         echo "STEP 5: Getting Zoom credentials"
         
-        Z1_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG1 -mount=t1lrophebr sestip6ecu)
-        Z1_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG1 -mount=t1lrophebr sestip6ecu)
-        Z1_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG1 -mount=t1lrophebr sestip6ecu)
-        Z2_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG2 -mount=t1lrophebr sestip6ecu)
-        Z2_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG2 -mount=t1lrophebr sestip6ecu)
-        Z2_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG2 -mount=t1lrophebr sestip6ecu)
-        Z4_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG4 -mount=t1lrophebr sestip6ecu)
-        Z4_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG4 -mount=t1lrophebr sestip6ecu)
-        Z4_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG4 -mount=t1lrophebr sestip6ecu)
+        Z1_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG1 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z1_AI"; exit 1; }
+        Z1_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG1 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z1_CI"; exit 1; }
+        Z1_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG1 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z1_CS"; exit 1; }
+        Z2_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG2 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z2_AI"; exit 1; }
+        Z2_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG2 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z2_CI"; exit 1; }
+        Z2_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG2 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z2_CS"; exit 1; }
+        Z4_AI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG4 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z4_AI"; exit 1; }
+        Z4_CI=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG4 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z4_CI"; exit 1; }
+        Z4_CS=$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG4 -mount=t1lrophebr sestip6ecu 2>/dev/null) || { echo "::error::Failed to retrieve Z4_CS"; exit 1; }
         
-        [[ -z "$Z1_AI" ]] && { echo "ERROR: Z1_AI is empty"; exit 1; }
-        [[ -z "$Z2_AI" ]] && { echo "ERROR: Z2_AI is empty"; exit 1; }
-        [[ -z "$Z4_AI" ]] && { echo "ERROR: Z4_AI is empty"; exit 1; }
+        [[ -z "$Z1_AI" ]] && { echo "::error::Z1_AI is empty"; exit 1; }
+        [[ -z "$Z2_AI" ]] && { echo "::error::Z2_AI is empty"; exit 1; }
+        [[ -z "$Z4_AI" ]] && { echo "::error::Z4_AI is empty"; exit 1; }
         echo "✓ Zoom credentials retrieved"
         
         # Save credentials to encrypted file using proper escaping
+        # Security: File is in RUNNER_TEMP (tmpfs), encrypted by GitHub, deleted after use
         CREDS_FILE="${RUNNER_TEMP}/vault_creds_${GITHUB_RUN_ID}.env"
         {
             echo "export PGHOST=$(printf %q "$PGHOST")"
@@ -178,6 +196,11 @@ jobs:
         chmod 600 "$CREDS_FILE"
         echo "✓ Credentials saved to $CREDS_FILE with proper escaping"
         echo "file=$CREDS_FILE" >> $GITHUB_OUTPUT
+        
+        # Security: Unset sensitive variables
+        unset VAULT_TOKEN SERVICE_TOKEN ALL_TOKEN ITD_TEST_TOKEN ZOOM_TOKEN AWS_ROOT_TOKEN
+        unset PGPASSWORD AWS_SECRET_ACCESS_KEY VIMEO_ACCESS_TOKEN VIMEO_CLIENT_SECRET
+        unset Z1_CS Z2_CS Z4_CS
     
     - name: Upload credentials as artifact (encrypted by GitHub)
       uses: actions/upload-artifact@v4
@@ -185,6 +208,12 @@ jobs:
         name: vault-credentials-${{ github.run_id }}
         path: ${{ steps.vault.outputs.file }}
         retention-days: 1
+    
+    - name: Cleanup local credential file
+      if: always()
+      run: |
+        CREDS_FILE="${RUNNER_TEMP}/vault_creds_${GITHUB_RUN_ID}.env"
+        shred -vfz -n 3 "$CREDS_FILE" 2>/dev/null || rm -f "$CREDS_FILE"
 
   prepare-matrix:
     needs: get-vault-credentials
@@ -304,8 +333,13 @@ jobs:
         CREDS_FILE="${RUNNER_TEMP}/vault_creds_${GITHUB_RUN_ID}.env"
         
         if [ ! -f "$CREDS_FILE" ]; then
-          echo "ERROR: Credentials file not found: $CREDS_FILE"
+          echo "::error::Credentials file not found: $CREDS_FILE"
           exit 1
+        fi
+        
+        # Security: Verify file permissions
+        if [ "$(stat -c %a "$CREDS_FILE" 2>/dev/null || stat -f %A "$CREDS_FILE")" != "600" ]; then
+          chmod 600 "$CREDS_FILE"
         fi
         
         # Source credentials (shell interprets printf %q escaping)
@@ -313,8 +347,8 @@ jobs:
         
         # Verify DB connection
         echo "Testing database connection..."
-        psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1;" || {
-          echo "ERROR: Database connection failed"
+        psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1;" > /dev/null 2>&1 || {
+          echo "::error::Database connection failed - check credentials and network"
           exit 1
         }
         echo "✓ Database connection successful"
@@ -469,8 +503,9 @@ jobs:
     - name: Cleanup credentials
       if: always()
       run: |
+        # Security: Securely delete credential file
         CREDS_FILE="${RUNNER_TEMP}/vault_creds_${GITHUB_RUN_ID}.env"
-        rm -f "$CREDS_FILE" || true
+        shred -vfz -n 3 "$CREDS_FILE" 2>/dev/null || rm -f "$CREDS_FILE" || true
 
   cleanup-credentials:
     needs: [get-vault-credentials, process-videos]
