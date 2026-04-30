@@ -133,93 +133,12 @@ jobs:
         python3 -m pip install -r wv_source/conf/requirements.txt -q
         chmod +x wv_source/bin/*
 
-    - name: Retrieve Vault Credentials (in-memory, masked)
+    - name: Retrieve Vault Credentials
       env:
         VAULT_ADDR: ${{ secrets.VAULT_URL }}
         SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
-      run: |
-        set +x
-        set -euo pipefail
-
-        CREDS_FILE="$RUNNER_TEMP/.creds.env"
-        umask 077
-        : > "$CREDS_FILE"
-
-        # Helper: register secret with GitHub (so it is redacted everywhere) and write to creds file
-        mask_and_save() {
-          local name="$1" value="$2"
-          if [ -z "$value" ]; then
-            echo "::error::$name is empty"
-            return 1
-          fi
-          echo "::add-mask::$value"
-          # Use printf %q so values with special chars survive shell sourcing
-          printf 'export %s=%q\n' "$name" "$value" >> "$CREDS_FILE"
-        }
-
-        export VAULT_TOKEN="$SERVICE_TOKEN"
-
-        ALL_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=toc7kawoc7 -mount=hej0SESwEs cicuwrl4po 2>/dev/null) || { echo "::error::Failed to retrieve ALL_TOKEN"; exit 1; }
-        echo "::add-mask::$ALL_TOKEN"
-        export VAULT_TOKEN="$ALL_TOKEN"
-
-        ITD_TEST_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=wr0swu5udi -mount=driy9s4uce je0emad4ov 2>/dev/null) || { echo "::error::Failed to get ITD_TEST_TOKEN"; exit 1; }
-        ZOOM_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=v0ve2regos -mount=driy9s4uce je0emad4ov 2>/dev/null) || { echo "::error::Failed to get ZOOM_TOKEN"; exit 1; }
-        AWS_ROOT_TOKEN=$(vault kv get -address="$VAULT_ADDR" -field=vepiz9pafr -mount=driy9s4uce je0emad4ov 2>/dev/null) || { echo "::error::Failed to get AWS_ROOT_TOKEN"; exit 1; }
-        echo "::add-mask::$ITD_TEST_TOKEN"
-        echo "::add-mask::$ZOOM_TOKEN"
-        echo "::add-mask::$AWS_ROOT_TOKEN"
-
-        # DB credentials
-        export VAULT_TOKEN="$ITD_TEST_TOKEN"
-        mask_and_save PGHOST     "$(vault kv get -address="$VAULT_ADDR" -field=DB_HOST     -mount=ql1te2icha bruxe0az6q 2>/dev/null)"
-        mask_and_save PGPORT     "$(vault kv get -address="$VAULT_ADDR" -field=DB_PORT     -mount=ql1te2icha bruxe0az6q 2>/dev/null)"
-        mask_and_save PGDATABASE "$(vault kv get -address="$VAULT_ADDR" -field=DB_NAME     -mount=ql1te2icha bruxe0az6q 2>/dev/null)"
-        mask_and_save PGUSER     "$(vault kv get -address="$VAULT_ADDR" -field=DB_USER     -mount=ql1te2icha bruxe0az6q 2>/dev/null)"
-        mask_and_save PGPASSWORD "$(vault kv get -address="$VAULT_ADDR" -field=DB_PASSWORD -mount=ql1te2icha bruxe0az6q 2>/dev/null)"
-
-        # Vimeo credentials
-        mask_and_save VIMEO_ACCESS_TOKEN  "$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_ACCESS_TOKEN  -mount=ql1te2icha bruxe0az6q 2>/dev/null)"
-        mask_and_save VIMEO_CLIENT_ID     "$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_CLIENT_ID     -mount=ql1te2icha bruxe0az6q 2>/dev/null)"
-        mask_and_save VIMEO_CLIENT_SECRET "$(vault kv get -address="$VAULT_ADDR" -field=VIMEO_CLIENT_SECRET -mount=ql1te2icha bruxe0az6q 2>/dev/null)"
-
-        # AWS credentials
-        export VAULT_TOKEN="$AWS_ROOT_TOKEN"
-        mask_and_save AWS_ACCESS_KEY_ID     "$(vault kv get -address="$VAULT_ADDR" -field=thujostav9 -mount=yi6pobrath s7ohebu2ho 2>/dev/null)"
-        mask_and_save AWS_SECRET_ACCESS_KEY "$(vault kv get -address="$VAULT_ADDR" -field=yuru9ibruw -mount=yi6pobrath s7ohebu2ho 2>/dev/null)"
-        mask_and_save AWS_DEFAULT_REGION    "ap-south-1"
-
-        # Zoom credentials
-        export VAULT_TOKEN="$ZOOM_TOKEN"
-        mask_and_save Z1_AI "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG1   -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-        mask_and_save Z1_CI "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG1    -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-        mask_and_save Z1_CS "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG1 -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-        mask_and_save Z2_AI "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG2   -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-        mask_and_save Z2_CI "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG2    -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-        mask_and_save Z2_CS "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG2 -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-        mask_and_save Z4_AI "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_ACCOUNT_ID_ORG4   -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-        mask_and_save Z4_CI "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_ID_ORG4    -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-        mask_and_save Z4_CS "$(vault kv get -address="$VAULT_ADDR" -field=ZOOM_CLIENT_SECRET_ORG4 -mount=t1lrophebr sestip6ecu 2>/dev/null)"
-
-        # ITD token from GitHub secrets (already masked, but register from this context too)
-        ITD_TOKEN_VALUE='${{ secrets.ITD_TOKEN }}'
-        if [ -n "$ITD_TOKEN_VALUE" ]; then
-          echo "::add-mask::$ITD_TOKEN_VALUE"
-          printf 'export ITD_TOKEN=%q\n' "$ITD_TOKEN_VALUE" >> "$CREDS_FILE"
-        fi
-
-        chmod 600 "$CREDS_FILE"
-
-        # Verify DB connectivity without echoing values
-        # shellcheck disable=SC1090
-        source "$CREDS_FILE"
-        if ! PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1;" >/dev/null 2>&1; then
-          echo "::error::Database connection failed"
-          exit 1
-        fi
-
-        unset VAULT_TOKEN SERVICE_TOKEN ALL_TOKEN ITD_TEST_TOKEN ZOOM_TOKEN AWS_ROOT_TOKEN
-        echo "Credentials retrieved and validated"
+        ITD_TOKEN: ${{ secrets.ITD_TOKEN }}
+      run: bash wv_source/bin/vault_fetch.sh
 
     - name: Download watermark assets from S3
       run: |
