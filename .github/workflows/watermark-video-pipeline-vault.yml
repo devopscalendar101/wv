@@ -23,6 +23,9 @@ on:
         description: 'Days to scan back when refresh_attendance is ON and date is blank'
         required: false
         default: '30'
+      refresh_batches:
+        description: 'Batches to refresh, comma-separated (blank = all). Only used when refresh_attendance is ON.'
+        required: false
       s3_delete_original:
         type: boolean
         default: false
@@ -104,7 +107,31 @@ jobs:
           # Only batch_name travels in the matrix: GitHub renders the matrix
           # context in the "Set up job" log, which is world-readable here, so
           # the zoom/course/batch IDs are looked up inside the job instead.
-          BATCH_MATRIX=$(jq -n -c --argjson batches "$BATCHES" \
+          # refresh_batches narrows the refresh to specific batches; blank
+          # means all. This affects ONLY the refresh job -- the daily
+          # scheduled video+attendance run above always covers every batch.
+          SEL_BATCHES="$BATCHES"
+          if [ -n "${{ github.event.inputs.refresh_batches }}" ]; then
+            SEL_BATCHES=$(jq -n -c \
+              --argjson b "$BATCHES" \
+              --arg s "${{ github.event.inputs.refresh_batches }}" \
+              '($s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))) as $names
+               | [$b[] | select(.batch_name as $n | any($names[]; . == $n))]')
+
+            WANTED=$(echo "${{ github.event.inputs.refresh_batches }}" | tr ',' '\n' | grep -c '[^[:space:]]')
+            GOT=$(echo "$SEL_BATCHES" | jq 'length')
+            echo "Refresh batch filter: $GOT of $WANTED requested batch(es) matched"
+
+            if [ "$GOT" -eq 0 ]; then
+              echo "::error::No enabled batch matched refresh_batches - check the names against config"
+              exit 1
+            fi
+            if [ "$GOT" -lt "$WANTED" ]; then
+              echo "::warning::$((WANTED - GOT)) requested batch(es) did not match an enabled batch"
+            fi
+          fi
+
+          BATCH_MATRIX=$(jq -n -c --argjson batches "$SEL_BATCHES" \
             '{include: [$batches[] | {batch_name}]}')
           echo "batch_matrix=$BATCH_MATRIX" >> $GITHUB_OUTPUT
 
