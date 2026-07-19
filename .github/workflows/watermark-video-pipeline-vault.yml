@@ -15,6 +15,14 @@ on:
       class_date_list:
         description: 'Comma-separated list of class dates (YYYYMMDD, leave blank for today)'
         required: false
+      refresh_attendance:
+        description: 'Refresh attendance only (skips video). Blank date = scan back refresh_lookback_days.'
+        type: boolean
+        default: false
+      refresh_lookback_days:
+        description: 'Days to scan back when refresh_attendance is ON and date is blank'
+        required: false
+        default: '30'
       s3_delete_original:
         type: boolean
         default: false
@@ -46,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      batch_matrix: ${{ steps.set-matrix.outputs.batch_matrix }}
+      refresh_dates: ${{ steps.set-matrix.outputs.refresh_dates }}
 
     steps:
       - name: Checkout private source repo
@@ -68,6 +78,9 @@ jobs:
             CLASS_DATES=$(date -u +%Y%m%d)
           fi
 
+          # Only batch_name and class_date travel in the matrix. GitHub renders
+          # the matrix context in the world-readable "Set up job" log, so the
+          # zoom/course/batch IDs are resolved inside the job instead.
           MATRIX=$(jq -n -c \
             --argjson batches "$BATCHES" \
             --arg dates "$CLASS_DATES" \
@@ -77,12 +90,6 @@ jobs:
                 ($dates | split(",") | .[] | gsub("^\\s+|\\s+$";"")) as $date |
                 {
                   batch_name: $batch.batch_name,
-                  course_id: $batch.course_id,
-                  itd_zoom_id: $batch.itd_zoom_id,
-                  batch_id: $batch.batch_id,
-                  zoom_id: $batch.zoom_id,
-                  zoom_account: $batch.zoom_account,
-                  parent_topic: $batch.parent_topic,
                   class_date: $date
                 }
               ]
@@ -90,8 +97,35 @@ jobs:
 
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
+          # ── Attendance refresh: one job per batch, dates looped inside ──
+          # Expanding the matrix by date too would blow past the 256-job cap
+          # and re-install Vault/ffmpeg for every single day.
+          #
+          # Only batch_name travels in the matrix: GitHub renders the matrix
+          # context in the "Set up job" log, which is world-readable here, so
+          # the zoom/course/batch IDs are looked up inside the job instead.
+          BATCH_MATRIX=$(jq -n -c --argjson batches "$BATCHES" \
+            '{include: [$batches[] | {batch_name}]}')
+          echo "batch_matrix=$BATCH_MATRIX" >> $GITHUB_OUTPUT
+
+          if [ -n "${{ github.event.inputs.class_date_list }}" ]; then
+            REFRESH_DATES="$CLASS_DATES"
+          else
+            LOOKBACK="${{ github.event.inputs.refresh_lookback_days || '30' }}"
+            case "$LOOKBACK" in
+              ''|*[!0-9]*) LOOKBACK=30 ;;
+            esac
+            [ "$LOOKBACK" -lt 1 ] && LOOKBACK=1
+            [ "$LOOKBACK" -gt 180 ] && LOOKBACK=180
+            REFRESH_DATES=$(for i in $(seq 0 $((LOOKBACK - 1))); do
+              date -u -d "-$i day" +%Y%m%d
+            done | paste -sd, -)
+          fi
+          echo "refresh_dates=$REFRESH_DATES" >> $GITHUB_OUTPUT
+
   process-videos:
     needs: prepare-matrix
+    if: ${{ github.event.inputs.refresh_attendance != 'true' }}
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 4
@@ -155,18 +189,37 @@ jobs:
         echo "WM_PATH=$WM_DIR" >> $GITHUB_ENV
         echo "PATH=$GITHUB_WORKSPACE/wv_source/bin:$PATH" >> $GITHUB_ENV
 
-    - name: Set Zoom Email from Account
-      id: zoom-email
+    - name: Resolve batch config
       run: |
         set +x
-        case "${{ matrix.zoom_account }}" in
+        # IDs come from the private config and are masked before anything can
+        # reach this world-readable log; nothing identifying is echoed.
+        B=$(jq -c --arg n "${{ matrix.batch_name }}" \
+              '.batches[] | select(.batch_name == $n)' wv_source/conf/config.json)
+        if [ -z "$B" ]; then
+          echo "::error::Batch not found in config"
+          exit 1
+        fi
+
+        # Masking values shorter than 4 chars would make GitHub redact that
+        # character everywhere and shred the log, so only mask the long ones.
+        for k in course_id itd_zoom_id batch_id zoom_id zoom_account parent_topic; do
+          v=$(echo "$B" | jq -r --arg k "$k" '.[$k]')
+          [ "${#v}" -ge 4 ] && echo "::add-mask::$v"
+          echo "BATCH_${k}=$v" >> $GITHUB_ENV
+        done
+
+        ZA=$(echo "$B" | jq -r '.zoom_account')
+        case "$ZA" in
           Z1) ZOOM_EMAIL="itdefined.org@gmail.com" ;;
           Z2) ZOOM_EMAIL="itdefined.org2@gmail.com" ;;
           Z3) ZOOM_EMAIL="itdefined.org3@gmail.com" ;;
           Z4) ZOOM_EMAIL="itdefined.org4@gmail.com" ;;
           *)  ZOOM_EMAIL="unknown@gmail.com" ;;
         esac
-        echo "zoom_email=$ZOOM_EMAIL" >> $GITHUB_OUTPUT
+        echo "::add-mask::$ZOOM_EMAIL"
+        echo "BATCH_zoom_email=$ZOOM_EMAIL" >> $GITHUB_ENV
+        echo "Batch config resolved"
 
     - name: Generate topic from date
       id: topic
@@ -219,14 +272,14 @@ jobs:
         wv_source/bin/watermark_pipeline.sh \
           "class-recordings-itdefined" \
           "${{ matrix.batch_name }}" \
-          "${{ matrix.itd_zoom_id }}" \
-          "${{ matrix.zoom_account }}" \
+          "$BATCH_itd_zoom_id" \
+          "$BATCH_zoom_account" \
           "${{ steps.topic.outputs.topic }}" \
-          "${{ matrix.course_id }}" \
-          "${{ matrix.batch_id }}" \
-          "${{ matrix.parent_topic }}" \
-          "${{ matrix.zoom_id }}" \
-          "${{ steps.zoom-email.outputs.zoom_email }}" \
+          "$BATCH_course_id" \
+          "$BATCH_batch_id" \
+          "$BATCH_parent_topic" \
+          "$BATCH_zoom_id" \
+          "$BATCH_zoom_email" \
           "${{ matrix.class_date }}" \
           "${{ github.event.inputs.s3_delete_original || 'false' }}" \
           "${{ github.event.inputs.delete_attendance || 'false' }}" \
@@ -263,6 +316,163 @@ jobs:
     - name: Cleanup local videos
       if: always()
       run: rm -rf ~/.tmp/${{ matrix.batch_name }}/*.mp4 || true
+
+    - name: Cleanup credentials
+      if: always()
+      run: |
+        set +x
+        CREDS_FILE="$RUNNER_TEMP/.creds.env"
+        if [ -f "$CREDS_FILE" ]; then
+          shred -vfz -n 3 "$CREDS_FILE" 2>/dev/null || rm -f "$CREDS_FILE" || true
+        fi
+
+  # ─────────────────────────────────────────────
+  # Attendance refresh (no video processing)
+  # ─────────────────────────────────────────────
+  refresh-attendance:
+    needs: prepare-matrix
+    if: ${{ github.event.inputs.refresh_attendance == 'true' }}
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 4
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.batch_matrix) }}
+
+    name: "attendance_${{ matrix.batch_name }}"
+
+    env:
+      # Public repo: participant emails/names and internal IDs stay out of logs.
+      PUBLIC_LOG: 'true'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Checkout private source repo
+      uses: actions/checkout@v4
+      with:
+        repository: devopscalendar101/wv_source
+        token: ${{ secrets.PAT }}
+        path: wv_source
+
+    - name: Cache pip packages
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ hashFiles('wv_source/conf/requirements.txt') }}
+
+    - name: Install Vault CLI and PostgreSQL
+      run: |
+        set +x
+        wget -qO- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
+        sudo apt-get update -qq && sudo apt-get install -y -qq vault postgresql-client
+
+    - name: Setup Environment
+      run: |
+        set +x
+        chmod +x wv_source/bin/bootstrap.sh
+        python3 -m pip install --upgrade pip -q
+        python3 -m pip install -r wv_source/conf/requirements.txt -q
+        chmod +x wv_source/bin/*
+        echo "PATH=$GITHUB_WORKSPACE/wv_source/bin:$PATH" >> $GITHUB_ENV
+
+    - name: Retrieve Vault Credentials
+      env:
+        VAULT_ADDR: ${{ secrets.VAULT_URL }}
+        SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
+        ITD_TOKEN: ${{ secrets.ITD_TOKEN }}
+      run: bash wv_source/bin/vault_fetch.sh
+
+    - name: Resolve batch config
+      run: |
+        set +x
+        # Read the IDs from the private config and mask them before they can
+        # reach the log; nothing identifying is echoed.
+        B=$(jq -c --arg n "${{ matrix.batch_name }}" \
+              '.batches[] | select(.batch_name == $n)' wv_source/conf/config.json)
+        if [ -z "$B" ]; then
+          echo "::error::Batch not found in config"
+          exit 1
+        fi
+
+        # Masking values shorter than 4 chars would make GitHub redact that
+        # character everywhere and shred the log, so only mask the long ones.
+        # Short IDs are simply never echoed.
+        for k in course_id itd_zoom_id batch_id zoom_id zoom_account parent_topic; do
+          v=$(echo "$B" | jq -r --arg k "$k" '.[$k]')
+          [ "${#v}" -ge 4 ] && echo "::add-mask::$v"
+          echo "BATCH_${k}=$v" >> $GITHUB_ENV
+        done
+
+        ZA=$(echo "$B" | jq -r '.zoom_account')
+        case "$ZA" in
+          Z1) ZOOM_EMAIL="itdefined.org@gmail.com" ;;
+          Z2) ZOOM_EMAIL="itdefined.org2@gmail.com" ;;
+          Z3) ZOOM_EMAIL="itdefined.org3@gmail.com" ;;
+          Z4) ZOOM_EMAIL="itdefined.org4@gmail.com" ;;
+          *)  ZOOM_EMAIL="unknown@gmail.com" ;;
+        esac
+        echo "::add-mask::$ZOOM_EMAIL"
+        echo "BATCH_zoom_email=$ZOOM_EMAIL" >> $GITHUB_ENV
+        echo "Batch config resolved"
+
+    - name: Refresh attendance for each date
+      run: |
+        set +x
+        # shellcheck disable=SC1091
+        source "$RUNNER_TEMP/.creds.env"
+
+        DATES="${{ needs.prepare-matrix.outputs.refresh_dates }}"
+        DEL_ATT="${{ github.event.inputs.delete_attendance || 'false' }}"
+
+        if [ "$DEL_ATT" = "true" ]; then
+          echo "Mode: FORCE REPAIR - existing attendance will be deleted and re-uploaded"
+        else
+          echo "Mode: FILL GAPS - dates that already have attendance are skipped"
+        fi
+        echo "Batch: ${{ matrix.batch_name }}"
+        echo "Dates to scan: $(echo "$DATES" | tr ',' '\n' | grep -c .)"
+        echo ""
+
+        ok=0; skipped=0; failed=0
+        IFS=',' read -ra DATE_ARR <<< "$DATES"
+        for d in "${DATE_ARR[@]}"; do
+          d=$(echo "$d" | tr -d '[:space:]')
+          [ -z "$d" ] && continue
+
+          set +e
+          wv_source/bin/watermark_pipeline.sh \
+            "class-recordings-itdefined" \
+            "${{ matrix.batch_name }}" \
+            "$BATCH_itd_zoom_id" \
+            "$BATCH_zoom_account" \
+            "Topic ${d:0:4}-${d:4:2}-${d:6:2}" \
+            "$BATCH_course_id" \
+            "$BATCH_batch_id" \
+            "$BATCH_parent_topic" \
+            "$BATCH_zoom_id" \
+            "$BATCH_zoom_email" \
+            "$d" \
+            "false" "$DEL_ATT" "false" "false" "false" \
+            "" "" "" "false" \
+            "true"
+          rc=$?
+          set -e
+
+          if [ $rc -eq 0 ]; then ok=$((ok+1)); else failed=$((failed+1)); fi
+        done
+
+        echo ""
+        echo "==================================================="
+        echo "Attendance refresh summary: ${{ matrix.batch_name }}"
+        echo "  dates processed : $ok"
+        echo "  dates failed    : $failed"
+        echo "==================================================="
+
+        if [ $failed -gt 0 ]; then
+          echo "::warning::$failed date(s) failed for ${{ matrix.batch_name }}"
+        fi
 
     - name: Cleanup credentials
       if: always()
