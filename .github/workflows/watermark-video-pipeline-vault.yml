@@ -6,7 +6,10 @@ permissions:
   id-token: write
 
 concurrency:
-  group: watermark-video-pipeline
+  # Key by the date input so the SAME date can't run twice at once, but
+  # DIFFERENT dates run in parallel. Blank/scheduled runs share the "today"
+  # group so they serialize against each other.
+  group: watermark-video-pipeline-${{ github.event.inputs.class_date_list || 'today' }}
   cancel-in-progress: false
 
 on:
