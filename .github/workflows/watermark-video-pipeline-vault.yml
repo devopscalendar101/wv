@@ -51,6 +51,9 @@ on:
   schedule:
     # UTC. 05:30/06:30/07:30/08:30 UTC = 11:00/12:00/13:00/14:00 IST, Mon-Sat
     - cron: "30 5-8 * * 1-6"
+    # UTC. 17:30/18:00 UTC = 23:00/23:30 IST, Mon-Sat
+    - cron: "30 17 * * 1-6"
+    - cron: "0 18 * * 1-6"
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
