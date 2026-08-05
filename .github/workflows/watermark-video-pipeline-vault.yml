@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       class_date_list:
-        description: 'Comma-separated list of class dates (YYYYMMDD, leave blank for today)'
+        description: 'Class dates: YYYYMMDD, comma-separated, and/or ranges START-END (e.g. 20260725-20260805). Blank = today.'
         required: false
       refresh_attendance:
         description: 'Refresh attendance only (skips video). Blank date = scan back refresh_lookback_days.'
@@ -26,8 +26,8 @@ on:
         description: 'Days to scan back when refresh_attendance is ON and date is blank'
         required: false
         default: '30'
-      refresh_batches:
-        description: 'Batches to refresh, comma-separated (blank = all). Only used when refresh_attendance is ON.'
+      batches:
+        description: 'Batch names to process, comma-separated (blank = all enabled). Applies to both video and attendance-refresh.'
         required: false
       s3_delete_original:
         type: boolean
@@ -87,11 +87,63 @@ jobs:
             CLASS_DATES=$(date -u +%Y%m%d)
           fi
 
+          # Expand any START-END ranges (e.g. 20260725-20260805) into every day
+          # in the range, inclusive. Plain single dates pass through untouched.
+          # The result feeds both the video matrix and the refresh_dates output.
+          expand_dates() {
+            local out=() t s e cur
+            IFS=',' read -ra _toks <<< "$1"
+            for t in "${_toks[@]}"; do
+              t=$(echo "$t" | tr -d '[:space:]')
+              [ -z "$t" ] && continue
+              if [[ "$t" =~ ^[0-9]{8}-[0-9]{8}$ ]]; then
+                s="${t%%-*}"; e="${t##*-}"
+                if [ "$s" -gt "$e" ]; then cur="$s"; s="$e"; e="$cur"; fi
+                cur="$s"
+                while [ "$cur" -le "$e" ]; do
+                  out+=("$cur")
+                  cur=$(date -u -d "${cur:0:4}-${cur:4:2}-${cur:6:2} +1 day" +%Y%m%d)
+                done
+              else
+                out+=("$t")
+              fi
+            done
+            local IFS=,
+            echo "${out[*]}"
+          }
+          CLASS_DATES=$(expand_dates "$CLASS_DATES")
+
+          # ── Batch selection ──────────────────────────────────────────────
+          # The 'batches' input narrows processing to specific batch names;
+          # blank means all enabled batches. This applies to BOTH the video
+          # pipeline and the attendance-refresh job. Batch names are non-secret
+          # (config.json is committed), so echoing the filter summary is fine.
+          SEL_BATCHES="$BATCHES"
+          if [ -n "${{ github.event.inputs.batches }}" ]; then
+            SEL_BATCHES=$(jq -n -c \
+              --argjson b "$BATCHES" \
+              --arg s "${{ github.event.inputs.batches }}" \
+              '($s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))) as $names
+               | [$b[] | select(.batch_name as $n | any($names[]; . == $n))]')
+
+            WANTED=$(echo "${{ github.event.inputs.batches }}" | tr ',' '\n' | grep -c '[^[:space:]]')
+            GOT=$(echo "$SEL_BATCHES" | jq 'length')
+            echo "Batch filter: $GOT of $WANTED requested batch(es) matched"
+
+            if [ "$GOT" -eq 0 ]; then
+              echo "::error::No enabled batch matched 'batches' - check the names against config"
+              exit 1
+            fi
+            if [ "$GOT" -lt "$WANTED" ]; then
+              echo "::warning::$((WANTED - GOT)) requested batch(es) did not match an enabled batch"
+            fi
+          fi
+
           # Only batch_name and class_date travel in the matrix. GitHub renders
           # the matrix context in the world-readable "Set up job" log, so the
           # zoom/course/batch IDs are resolved inside the job instead.
           MATRIX=$(jq -n -c \
-            --argjson batches "$BATCHES" \
+            --argjson batches "$SEL_BATCHES" \
             --arg dates "$CLASS_DATES" \
             '{
               include: [
@@ -106,37 +158,12 @@ jobs:
 
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
-          # ── Attendance refresh: one job per batch, dates looped inside ──
-          # Expanding the matrix by date too would blow past the 256-job cap
-          # and re-install Vault/ffmpeg for every single day.
-          #
-          # Only batch_name travels in the matrix: GitHub renders the matrix
-          # context in the "Set up job" log, which is world-readable here, so
-          # the zoom/course/batch IDs are looked up inside the job instead.
-          # refresh_batches narrows the refresh to specific batches; blank
-          # means all. This affects ONLY the refresh job -- the daily
-          # scheduled video+attendance run above always covers every batch.
-          SEL_BATCHES="$BATCHES"
-          if [ -n "${{ github.event.inputs.refresh_batches }}" ]; then
-            SEL_BATCHES=$(jq -n -c \
-              --argjson b "$BATCHES" \
-              --arg s "${{ github.event.inputs.refresh_batches }}" \
-              '($s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0))) as $names
-               | [$b[] | select(.batch_name as $n | any($names[]; . == $n))]')
-
-            WANTED=$(echo "${{ github.event.inputs.refresh_batches }}" | tr ',' '\n' | grep -c '[^[:space:]]')
-            GOT=$(echo "$SEL_BATCHES" | jq 'length')
-            echo "Refresh batch filter: $GOT of $WANTED requested batch(es) matched"
-
-            if [ "$GOT" -eq 0 ]; then
-              echo "::error::No enabled batch matched refresh_batches - check the names against config"
-              exit 1
-            fi
-            if [ "$GOT" -lt "$WANTED" ]; then
-              echo "::warning::$((WANTED - GOT)) requested batch(es) did not match an enabled batch"
-            fi
-          fi
-
+          # ── Attendance refresh: one job per selected batch, dates looped
+          # inside. Expanding the matrix by date too would blow past the
+          # 256-job cap and re-install Vault/ffmpeg for every single day.
+          # Only batch_name travels in the matrix (world-readable log); the
+          # zoom/course/batch IDs are looked up inside the job instead. Uses
+          # the same SEL_BATCHES filter as the video matrix above.
           BATCH_MATRIX=$(jq -n -c --argjson batches "$SEL_BATCHES" \
             '{include: [$batches[] | {batch_name}]}')
           echo "batch_matrix=$BATCH_MATRIX" >> $GITHUB_OUTPUT
