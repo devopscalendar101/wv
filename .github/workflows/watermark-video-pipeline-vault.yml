@@ -234,7 +234,10 @@ jobs:
       env:
         VAULT_ADDR: ${{ secrets.VAULT_URL }}
         SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
-        ITD_TOKEN: ${{ secrets.ITD_TOKEN }}
+        # itdefined.org site API token (DRF), not a Vault token. Named apart from
+        # the Vault ITD_TOKEN so the token-renew sync never overwrites it; the
+        # fallback covers the switch until ITD_API_TOKEN is set.
+        ITD_API_TOKEN: ${{ secrets.ITD_API_TOKEN || secrets.ITD_TOKEN }}
       run: bash wv_source/bin/vault_fetch.sh
 
     - name: Download watermark assets from S3
@@ -444,7 +447,10 @@ jobs:
       env:
         VAULT_ADDR: ${{ secrets.VAULT_URL }}
         SERVICE_TOKEN: ${{ secrets.SERVICE_TOKEN }}
-        ITD_TOKEN: ${{ secrets.ITD_TOKEN }}
+        # itdefined.org site API token (DRF), not a Vault token. Named apart from
+        # the Vault ITD_TOKEN so the token-renew sync never overwrites it; the
+        # fallback covers the switch until ITD_API_TOKEN is set.
+        ITD_API_TOKEN: ${{ secrets.ITD_API_TOKEN || secrets.ITD_TOKEN }}
       run: bash wv_source/bin/vault_fetch.sh
 
     - name: Resolve batch config
